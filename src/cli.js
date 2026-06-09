@@ -47,7 +47,7 @@ ${color.bold('Modes')}
   block (default)  Hard-deny re-applying a fix that previously failed.
   warn             Allow it, but inject a warning to the agent.
 
-${color.dim('Docs: https://github.com/your-handle/regressionledger')}`;
+${color.dim('Docs: https://github.com/anlor1002-alt/regressionledger')}`;
 
 function icon(outcome) {
   if (outcome === 'fail') return color.red('✗ FAIL');

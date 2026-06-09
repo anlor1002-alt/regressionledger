@@ -6,7 +6,7 @@ and deliberately easy to reason about.
 ## Getting started
 
 ```bash
-git clone https://github.com/your-handle/regressionledger
+git clone https://github.com/anlor1002-alt/regressionledger
 cd regressionledger
 npm test        # runs node:test — no install step, no dependencies
 npm run demo    # the doom-loop simulation
