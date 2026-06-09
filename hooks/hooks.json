@@ -1,0 +1,42 @@
+{
+  "description": "RegressionLedger — record edits, link them to test/build outcomes, and block re-applying a previously-failed fix.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/bin/regressionledger.js", "hook", "pretooluse"],
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/bin/regressionledger.js", "hook", "posttooluse"],
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/bin/regressionledger.js", "hook", "posttooluse"],
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

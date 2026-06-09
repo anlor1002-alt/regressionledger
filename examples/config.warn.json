@@ -1,0 +1,6 @@
+{
+  "mode": "warn",
+  "threshold": 0.85,
+  "crossSymbol": true,
+  "maxLedger": 5000
+}

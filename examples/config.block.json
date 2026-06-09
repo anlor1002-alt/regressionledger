@@ -1,0 +1,6 @@
+{
+  "mode": "block",
+  "threshold": 0.9,
+  "crossSymbol": true,
+  "maxLedger": 5000
+}

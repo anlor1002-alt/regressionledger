@@ -12,7 +12,8 @@
   },
   "scripts": {
     "test": "node --test",
-    "demo": "node demo/simulate.js"
+    "demo": "node demo/simulate.js",
+    "prepublishOnly": "node --test"
   },
   "keywords": [
     "claude-code",
@@ -36,6 +37,15 @@
     "node": ">=18"
   },
   "license": "MIT",
+  "author": "anlor1002-alt (https://github.com/anlor1002-alt)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anlor1002-alt/regressionledger.git"
+  },
+  "homepage": "https://github.com/anlor1002-alt/regressionledger#readme",
+  "bugs": {
+    "url": "https://github.com/anlor1002-alt/regressionledger/issues"
+  },
   "dependencies": {},
   "devDependencies": {}
 }

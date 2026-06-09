@@ -1,5 +1,15 @@
 # RegressionLedger
 
+[![CI](https://github.com/anlor1002-alt/regressionledger/actions/workflows/ci.yml/badge.svg)](https://github.com/anlor1002-alt/regressionledger/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Node ≥ 18](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white)
+![Dependencies: 0](https://img.shields.io/badge/dependencies-0-brightgreen)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+<!-- After `npm publish`, uncomment:
+[![npm](https://img.shields.io/npm/v/regressionledger.svg)](https://www.npmjs.com/package/regressionledger)
+[![downloads](https://img.shields.io/npm/dm/regressionledger.svg)](https://www.npmjs.com/package/regressionledger)
+-->
+
 > **Stop your coding agent from resurrecting fixes that already failed.**
 
 Coding agents (Claude Code, Cursor, …) lose their memory when the context window
@@ -17,6 +27,10 @@ RegressionLedger is a tiny, **zero-dependency** Claude Code hook + CLI that:
 4. **hard-blocks** the agent — via a `PreToolUse` deny — the moment it tries to
    re-apply a patch that previously failed, telling it *exactly why* and to
    change strategy.
+
+<!-- Demo GIF: run `bash scripts/record-demo.sh`, commit demo/regressionledger.gif, then uncomment:
+![RegressionLedger blocking a repeat failed fix](demo/regressionledger.gif)
+-->
 
 ```
 ⛔ BLOCKED before it could waste another test cycle:
@@ -91,6 +105,17 @@ a suggestion.
 ## Install
 
 Requires Node ≥ 18.
+
+### As a Claude Code plugin (recommended)
+
+```text
+/plugin marketplace add anlor1002-alt/regressionledger
+/plugin install regressionledger@anlor1002-plugins
+```
+
+The hooks activate automatically — no `settings.json` editing and no restart.
+
+### As an npm package
 
 ```bash
 # inside your project
