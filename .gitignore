@@ -1,0 +1,16 @@
+# Dependencies (there are none, but just in case a contributor adds dev tooling)
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# RegressionLedger's own local history (config.json is safe to commit)
+.regressionledger/ledger.json
+.regressionledger/*.tmp-*

@@ -1,0 +1,41 @@
+{
+  "name": "regressionledger",
+  "version": "0.1.0",
+  "description": "Stop your coding agent from resurrecting fixes that already failed. A zero-dependency Claude Code hook + CLI that fingerprints every edit, links it to the test/build outcome, and HARD-BLOCKS the agent from re-applying a patch that previously failed — across sessions, surviving context compaction.",
+  "type": "module",
+  "bin": {
+    "regressionledger": "bin/regressionledger.js",
+    "rl": "bin/regressionledger.js"
+  },
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "demo": "node demo/simulate.js"
+  },
+  "keywords": [
+    "claude-code",
+    "claude-code-hook",
+    "ai-coding-agent",
+    "cursor",
+    "regression",
+    "doom-loop",
+    "agent-memory",
+    "verification",
+    "guardrail",
+    "vibe-coding"
+  ],
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}
