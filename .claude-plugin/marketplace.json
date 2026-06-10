@@ -9,7 +9,7 @@
       "name": "regressionledger",
       "source": "./",
       "description": "Stop your coding agent from re-applying fixes that already failed. Blocks repeat failed fixes across sessions.",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "author": {
         "name": "anlor1002-alt"
       },

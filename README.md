@@ -140,6 +140,8 @@ It runs itself. The commands you'll actually use:
 | --- | --- |
 | `rl doctor` | Verify the install: env checks plus **live hook round-trips** (a first-time edit must pass, a seeded repeat failure must be denied). |
 | `rl show [file]` | The attempt history — failures, passes, error signatures, previews. The shareable artifact. |
+| `rl show --by-error` | Cluster failures by error signature across files — exposes "you keep hitting the same wall from different angles". |
+| `rl report [--html]` | A shareable report: markdown to stdout, or a self-contained dark-mode HTML file with attempt timelines, blocked-fix counts, and error clusters. |
 | `rl stats` | Summary counts, plus how many repeat fixes were blocked (or would have been, in warn mode). |
 | `rl list [--json]` | Flat list of every attempt. |
 | `rl config` | View settings. `rl config mode warn`, `rl config threshold 0.85`, … |

@@ -21,3 +21,4 @@ export {
 export { handlePreToolUse, handlePostToolUse, extractEdits } from './hooks.js';
 export { init, buildHookConfig, binPath } from './install.js';
 export { runDoctor } from './doctor.js';
+export { groupByError, buildReportData, renderMarkdown, renderHtml } from './report.js';

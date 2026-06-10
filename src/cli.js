@@ -7,7 +7,7 @@
 //   rl clear --force             wipe the ledger
 //   rl hook <pretooluse|posttooluse>   (invoked BY Claude Code, reads stdin)
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { readStdin, color, debug } from './util.js';
@@ -24,6 +24,7 @@ import {
 import { handlePreToolUse, handlePostToolUse } from './hooks.js';
 import { init, buildHookConfig } from './install.js';
 import { runDoctor } from './doctor.js';
+import { buildReportData, renderMarkdown, renderHtml, groupByError } from './report.js';
 
 function version() {
   try {
@@ -39,7 +40,8 @@ const HELP = `${color.bold('RegressionLedger')} — stop your coding agent from 
 ${color.bold('Usage')}
   rl init [--warn] [--print]   Install the Claude Code hooks into ./.claude/settings.json
   rl doctor                    Verify the install: env, wiring, and live hook round-trips
-  rl show [file]               Show the attempt history (great for sharing/debugging)
+  rl show [file] [--by-error]  Attempt history; --by-error clusters failures by error signature
+  rl report [--html [file]]    Shareable report: markdown to stdout, or a self-contained HTML file
   rl list [--json]             Flat list of every recorded attempt
   rl stats                     Summary counts, including blocked / would-have-blocked hits
   rl config [key value]        View or change settings (mode, threshold, minFailures, crossSymbol, maxLedger)
@@ -67,8 +69,29 @@ function ago(ts) {
   return `${Math.round(hr / 24)}d ago`;
 }
 
+function cmdShowByError(root) {
+  const groups = groupByError(root);
+  console.log(`${color.bold('RegressionLedger')} ${color.dim('· failures clustered by error signature')}\n`);
+  if (!groups.length) {
+    console.log(color.dim('  No failed attempts recorded yet.'));
+    return 0;
+  }
+  for (const g of groups) {
+    console.log(`${color.red(color.bold(`${g.count}×`))}  ${color.bold(g.signature)}`);
+    console.log(`    ${color.dim(`across ${g.files.length} file(s):`)} ${g.files.map((f) => color.cyan(f)).join(', ')}`);
+    for (const a of g.attempts) {
+      console.log(`      ${color.gray(ago(a.ts))} ${color.cyan(a.file)} ${color.bold(a.symbol)}`);
+      if (a.preview) console.log(`        ${color.dim(a.preview)}`);
+    }
+    console.log('');
+  }
+  console.log(color.dim('Same signature across multiple attempts = you keep hitting the same wall. Step back and question the diagnosis, not the patch.'));
+  return 0;
+}
+
 function cmdShow(args) {
   const root = resolveRoot();
+  if (args.includes('--by-error')) return cmdShowByError(root);
   const filter = args.find((a) => !a.startsWith('-'));
   const ledger = loadLedger(root);
   let attempts = ledger.attempts;
@@ -198,6 +221,22 @@ function cmdConfig(args) {
   return 0;
 }
 
+function cmdReport(args) {
+  const root = resolveRoot();
+  const data = buildReportData(root);
+  const htmlIdx = args.indexOf('--html');
+  if (htmlIdx === -1) {
+    console.log(renderMarkdown(data));
+    return 0;
+  }
+  const out = args[htmlIdx + 1] && !args[htmlIdx + 1].startsWith('-')
+    ? args[htmlIdx + 1]
+    : 'regressionledger-report.html';
+  writeFileSync(out, renderHtml(data));
+  console.log(`${color.green('✓')} Report written to ${color.bold(out)}`);
+  return 0;
+}
+
 function cmdClear(args) {
   if (!args.includes('--force')) {
     console.error(color.yellow('Refusing to clear without --force. Run: rl clear --force'));
@@ -271,6 +310,8 @@ export async function main(argv) {
       return cmdStats();
     case 'doctor':
       return cmdDoctor();
+    case 'report':
+      return cmdReport(args);
     case 'config':
       return cmdConfig(args);
     case 'clear':

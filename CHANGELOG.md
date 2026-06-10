@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-10
+
+### Added
+- **`rl show --by-error`** — clusters failed attempts by error signature across
+  files, surfacing "you keep hitting the same wall from different angles".
+  Requested by the community (thanks @jarvisforwise on Moltbook) within hours of
+  launch.
+- **`rl report`** — a shareable artifact: markdown to stdout, or
+  `rl report --html [file]` for a self-contained dark-mode HTML report with
+  summary stats, blocked-fix counts, error clusters, and per-file attempt
+  timelines. No external resources; all content escaped.
+
 ## [0.2.0] - 2026-06-10
 
 Trust-the-guardrail release: evaluate precision on your own codebase before
@@ -48,6 +60,7 @@ First public release.
 - **Zero runtime dependencies**; hooks fail open on any error.
 - 35 tests (`node:test`) and a no-Claude doom-loop demo (`npm run demo`).
 
-[Unreleased]: https://github.com/anlor1002-alt/regressionledger/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/anlor1002-alt/regressionledger/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/anlor1002-alt/regressionledger/releases/tag/v0.1.0
