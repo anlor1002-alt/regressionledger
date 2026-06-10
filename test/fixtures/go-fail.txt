@@ -1,0 +1,4 @@
+--- FAIL: TestLogin (0.00s)
+    auth_test.go:21: expected 200, got 401
+FAIL
+FAIL	example.com/pkg/auth	0.014s

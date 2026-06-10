@@ -1,0 +1,11 @@
+ FAIL  src/auth.test.js
+  ● login › returns a session token
+
+    expect(received).toBe(expected)
+
+    Expected: 200
+    Received: 401
+
+Tests:       1 failed, 4 passed, 5 total
+Snapshots:   0 total
+Time:        1.82 s

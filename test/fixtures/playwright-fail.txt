@@ -1,0 +1,8 @@
+  1) [chromium] › auth.spec.ts:12:5 › login flow ────────────
+
+    Error: expect(received).toBe(expected)
+    Expected: 200
+    Received: 401
+
+  1 failed
+  11 passed (14.2s)

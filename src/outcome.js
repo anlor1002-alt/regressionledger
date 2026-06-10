@@ -2,105 +2,102 @@
 // check / lint) and, if so, whether it passed or failed — plus a short error
 // signature so a future block can explain *why* the earlier fix failed.
 //
-// This is heuristic text parsing across many toolchains. When the signal is
-// ambiguous we return outcome=null and leave attempts pending rather than guess.
+// The patterns live in src/signatures.js as a per-toolchain registry; adding a
+// new test runner there (plus a fixture) is the canonical first contribution.
+// When the signal is ambiguous we return outcome=null and leave attempts
+// pending rather than guess — a wrong "fail" would block a correct fix later.
 
+import { TOOLCHAINS, GENERIC } from './signatures.js';
 import { truncate } from './util.js';
 
-const VERIFY_PATTERNS = [
-  /\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:test|build|lint|typecheck|check|tsc|vitest|jest)\b/i,
-  /\bnpx?\s+(?:tsc|jest|vitest|mocha|ava|eslint|playwright|cypress)\b/i,
-  /\b(?:jest|vitest|mocha|ava|pytest|tox|nox|rspec|phpunit)\b/i,
-  /\bpython\d?\s+-m\s+(?:pytest|unittest)\b/i,
-  /\bgo\s+(?:test|build|vet)\b/i,
-  /\bcargo\s+(?:test|build|check|clippy)\b/i,
-  /\b(?:tsc|eslint|ruff|mypy|flake8|pylint)\b/i,
-  /\bdotnet\s+(?:test|build)\b/i,
-  /\b(?:gradle|mvn|\.\/gradlew|\.\/mvnw)\b.*\b(?:test|build|verify)\b/i,
-  /\bmake\s+(?:test|check|build|verify|lint)\b/i,
-];
-
 export function isVerificationCommand(command = '') {
-  return VERIFY_PATTERNS.some((re) => re.test(command));
+  return TOOLCHAINS.some((t) => t.commands.some((re) => re.test(command)));
 }
 
-// Counted failures — only a FAILURE when the captured number is > 0. These are
-// deliberately tied to real summary phrasing ("N failed", "N failing",
-// "(N errors)") so that prose like "fixed 2 errors automatically" can't trip a
-// false fail and block a correct fix on the next run.
-const NUMBERED_FAIL = [
-  /(\d+)\s+(?:tests?\s+)?fail(?:ed|ing)\b/i,
-  /(\d+)\s+failing\b/i,
-  /\bTests?:.*?(\d+)\s+failed/i,
-  /\(\s*(\d+)\s+errors?\b/i, // eslint: "✖ 3 problems (3 errors, 0 warnings)"
-];
-
-// Unambiguous failure markers. Note: bare ✗/✖/× glyphs are intentionally NOT
-// here — clean runs (e.g. "✖ 0 problems") print them, so they caused false
-// fails. Real failures from those runners are caught by NUMBERED_FAIL.
-const HARD_FAIL = [
-  /(^|\n)FAIL\s/, // jest "FAIL path/to/test"
-  /(^|\n)-+\s*FAIL\b/i, // go "--- FAIL: TestX"
-  /\berror\s+TS\d+\b/i,
-  /Traceback \(most recent call last\)/,
-  /\bAssertionError\b/,
-  /test result:\s*FAILED/i,
-  /(^|\n)\s*panic:/,
-  /BUILD\s+(?:FAILED|FAILURE)/i,
-  /Compilation (?:failed|error)/i,
-  /\bexit code:?\s*[1-9]\d*\b/i,
-];
-
-const PASS_MARKERS = [
-  /(^|\n)PASS\s/, // jest
-  /\b\d+\s+passing\b/i, // mocha/jest
-  /\b\d+\s+passed\b/i, // pytest, vitest ("N passed")
-  /=+\s*\d+\s+passed/i, // pytest summary line "===== 3 passed in 0.1s ====="
-  /(^|\n)ok\s/, // go "ok  pkg  0.01s"
-  /\bTests?:.*?\b0 failed/i,
-  /test result:\s*ok\b/i,
-  /BUILD\s+SUCCESS(?:FUL)?/i,
-  /Build succeeded/i,
-  /\b0 problems\b/i,
-  /\bexit code:?\s*0\b/i,
-];
-
-const SIGNATURE_PATTERNS = [
-  /^.*\b(?:AssertionError|TypeError|ReferenceError|SyntaxError|RangeError|ValueError|KeyError|AttributeError|NullPointerException)\b.*$/m,
-  /^.*\berror TS\d+:.*$/m,
-  /^.*\bpanic:.*$/m,
-  /^.*\bExpected\b.*$/m,
-  /^.*\bFAIL\b.*$/m,
-  /^.*\berror(?:\[E\d+\])?:.*$/m,
-];
-
-function numberedFail(text) {
-  for (const re of NUMBERED_FAIL) {
+function countedFail(res, text) {
+  for (const re of res) {
     const m = re.exec(text);
-    if (m && parseInt(m[1], 10) > 0) return true;
+    if (m && parseInt(m[1], 10) > 0) return re;
   }
-  return false;
+  return null;
 }
 
-function extractSignature(text) {
-  for (const re of SIGNATURE_PATTERNS) {
-    const m = re.exec(text);
-    if (m) return truncate(m[0], 200);
+function firstMatch(res, text) {
+  for (const re of res) if (re.test(text)) return re;
+  return null;
+}
+
+function extractSignature(toolchain, text) {
+  // Try the deciding toolchain's pool first, then every other toolchain's
+  // (a generic "N failed" count from one toolchain often matches output whose
+  // best signature lines belong to another), then the generic pool.
+  const pools = [
+    toolchain ? toolchain.signatures : [],
+    ...TOOLCHAINS.map((t) => t.signatures),
+    GENERIC.signatures,
+  ];
+  for (const pool of pools) {
+    for (const re of pool) {
+      const m = re.exec(text);
+      if (m) return truncate(m[0], 200);
+    }
   }
   return 'verification failed';
 }
 
 /**
- * @returns {{outcome: 'pass'|'fail'|null, errorSignature: string|null}}
+ * Classify a verification run's output, with the evidence trail.
+ * @returns {{outcome:'pass'|'fail'|null, errorSignature:string|null,
+ *            matches:Array<{toolchain:string, kind:string, pattern:string}>}}
  */
+export function explainOutcome(text = '') {
+  const matches = [];
+  if (!text) return { outcome: null, errorSignature: null, matches };
+
+  // FAIL evidence first — a "3 failed, 5 passed" run is a fail, and pass
+  // markers must never override explicit failure evidence.
+  for (const t of TOOLCHAINS) {
+    const hard = firstMatch(t.fail, text);
+    if (hard) {
+      matches.push({ toolchain: t.name, kind: 'fail', pattern: String(hard) });
+      return { outcome: 'fail', errorSignature: extractSignature(t, text), matches };
+    }
+    const counted = countedFail(t.failCounts, text);
+    if (counted) {
+      matches.push({ toolchain: t.name, kind: 'fail-count', pattern: String(counted) });
+      return { outcome: 'fail', errorSignature: extractSignature(t, text), matches };
+    }
+  }
+  const gHard = firstMatch(GENERIC.fail, text);
+  if (gHard) {
+    matches.push({ toolchain: 'generic', kind: 'fail', pattern: String(gHard) });
+    return { outcome: 'fail', errorSignature: extractSignature(null, text), matches };
+  }
+  const gCount = countedFail(GENERIC.failCounts, text);
+  if (gCount) {
+    matches.push({ toolchain: 'generic', kind: 'fail-count', pattern: String(gCount) });
+    return { outcome: 'fail', errorSignature: extractSignature(null, text), matches };
+  }
+
+  // Then PASS evidence.
+  for (const t of TOOLCHAINS) {
+    const ok = firstMatch(t.pass, text);
+    if (ok) {
+      matches.push({ toolchain: t.name, kind: 'pass', pattern: String(ok) });
+      return { outcome: 'pass', errorSignature: null, matches };
+    }
+  }
+  const gOk = firstMatch(GENERIC.pass, text);
+  if (gOk) {
+    matches.push({ toolchain: 'generic', kind: 'pass', pattern: String(gOk) });
+    return { outcome: 'pass', errorSignature: null, matches };
+  }
+
+  return { outcome: null, errorSignature: null, matches };
+}
+
+/** @returns {{outcome:'pass'|'fail'|null, errorSignature:string|null}} */
 export function detectOutcome(text = '') {
-  if (!text) return { outcome: null, errorSignature: null };
-
-  const failed = numberedFail(text) || HARD_FAIL.some((re) => re.test(text));
-  if (failed) return { outcome: 'fail', errorSignature: extractSignature(text) };
-
-  const passed = PASS_MARKERS.some((re) => re.test(text));
-  if (passed) return { outcome: 'pass', errorSignature: null };
-
-  return { outcome: null, errorSignature: null };
+  const { outcome, errorSignature } = explainOutcome(text);
+  return { outcome, errorSignature };
 }

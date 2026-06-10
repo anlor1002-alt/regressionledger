@@ -165,6 +165,8 @@ It runs itself. The commands you'll actually use:
 | Command | What it does |
 | --- | --- |
 | `rl doctor` | Verify the install: env checks plus **live hook round-trips** (a first-time edit must pass, a seeded repeat failure must be denied). |
+| `rl doctor --explain "<output>"` | Paste any test/build output and see exactly how it's classified — pass, fail, or "ambiguous, left pending" — and which toolchain pattern decided. |
+| `rl why <file>` | Plain-language answer to "what have we tried here?": blocking failures with reasons, walls (same error across attempts), retirements with receipts, passes. |
 | `rl show [file]` | The attempt history — failures, passes, error signatures, previews. The shareable artifact. |
 | `rl show --by-error` | Cluster failures by error signature across files — exposes "you keep hitting the same wall from different angles". |
 | `rl report [--html]` | A shareable report: markdown to stdout, or a self-contained dark-mode HTML file with attempt timelines, blocked-fix counts, and error clusters. |
@@ -237,9 +239,12 @@ npm test        # node:test, zero dependencies
 npm run demo    # the doom-loop simulation above
 ```
 
-Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Good first PRs:
-add a language to the tokenizer's comment map, or a test-runner signature to the
-outcome parser.
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). The canonical
+first PR: **add support for your test runner** — one toolchain entry in
+[`src/signatures.js`](src/signatures.js), a real output sample in
+[`test/fixtures/`](test/fixtures), and a row in the table-driven
+[`test/outcome-fixtures.test.js`](test/outcome-fixtures.test.js). Also good:
+add a language to the tokenizer's comment map.
 
 ## License
 

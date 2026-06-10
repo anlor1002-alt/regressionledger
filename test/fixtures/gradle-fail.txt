@@ -1,0 +1,8 @@
+> Task :test FAILED
+
+AuthServiceTest > loginReturnsToken FAILED
+    org.opentest4j.AssertionFailedError at AuthServiceTest.java:33
+
+3 tests completed, 1 failed
+
+BUILD FAILED in 4s

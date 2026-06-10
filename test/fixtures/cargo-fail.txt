@@ -1,0 +1,12 @@
+running 6 tests
+test auth::login ... FAILED
+
+failures:
+
+---- auth::login stdout ----
+thread 'auth::login' panicked at src/auth.rs:42:9:
+assertion `left == right` failed
+  left: 401
+ right: 200
+
+test result: FAILED. 5 passed; 1 failed; 0 ignored

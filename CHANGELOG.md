@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-10
+
+### Added
+- **Test-runner signature registry** (`src/signatures.js`) — the pass/fail
+  parser is now a per-toolchain registry (jest/vitest, mocha/ava, pytest, go,
+  cargo, tsc, eslint/ruff/mypy, gradle/maven, dotnet, playwright/cypress,
+  make/generic) backed by 18 real-output fixtures and a table-driven test.
+  Adding your runner is now the canonical first PR.
+- **`rl doctor --explain "<output>"`** — paste any test/build output and see
+  exactly how it's classified and which toolchain pattern decided. Ambiguous
+  output is honestly reported as "left pending".
+- **`rl why <file>`** — plain-language answer to "what have we tried here?":
+  blocking failures with reasons, walls (same error across attempts),
+  retirements with receipts, passes, pendings.
+
+### Fixed
+- Error-signature extraction now searches all toolchain pools, so a cargo or
+  gradle failure caught by a generic "N failed" count still gets its real
+  signature (`panicked at…`, `BUILD FAILED`) instead of a placeholder.
+
 ## [0.6.0] - 2026-06-10
 
 ### Added
@@ -99,7 +119,8 @@ First public release.
 - **Zero runtime dependencies**; hooks fail open on any error.
 - 35 tests (`node:test`) and a no-Claude doom-loop demo (`npm run demo`).
 
-[Unreleased]: https://github.com/anlor1002-alt/regressionledger/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/anlor1002-alt/regressionledger/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.3.0...v0.4.0

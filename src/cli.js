@@ -26,6 +26,7 @@ import { handlePreToolUse, handlePostToolUse } from './hooks.js';
 import { init, buildHookConfig } from './install.js';
 import { runDoctor } from './doctor.js';
 import { buildReportData, renderMarkdown, renderHtml, groupByError } from './report.js';
+import { explainOutcome } from './outcome.js';
 
 function version() {
   try {
@@ -41,6 +42,8 @@ const HELP = `${color.bold('RegressionLedger')} — stop your coding agent from 
 ${color.bold('Usage')}
   rl init [--warn] [--print]   Install the Claude Code hooks into ./.claude/settings.json
   rl doctor                    Verify the install: env, wiring, and live hook round-trips
+  rl doctor --explain "<out>"  Show how a test/build output gets classified (and by which pattern)
+  rl why <file>                Plain-language summary: what was tried here and how it went
   rl show [file] [--by-error]  Attempt history; --by-error clusters failures by error signature
   rl report [--html [file]]    Shareable report: markdown to stdout, or a self-contained HTML file
   rl list [--json]             Flat list of every recorded attempt
@@ -269,6 +272,89 @@ function cmdReport(args) {
   return 0;
 }
 
+function cmdWhy(args) {
+  const file = args.find((a) => !a.startsWith('-'));
+  if (!file) {
+    console.error(color.red('Usage: rl why <file>'));
+    return 1;
+  }
+  const root = resolveRoot();
+  const attempts = loadLedger(root).attempts.filter((a) => a.file.includes(file));
+  console.log(`${color.bold('What have we tried in')} ${color.cyan(file)}${color.bold('?')}\n`);
+  if (!attempts.length) {
+    console.log(color.dim('  Nothing recorded yet — no edits to this file have been seen.'));
+    return 0;
+  }
+
+  const fails = attempts.filter((a) => a.outcome === 'fail');
+  const passes = attempts.filter((a) => a.outcome === 'pass');
+  const retired = attempts.filter((a) => a.outcome === 'retired');
+  const pending = attempts.filter((a) => a.outcome === 'pending');
+
+  if (fails.length) {
+    console.log(color.red(color.bold(`  ${fails.length} approach(es) failed and still block:`)));
+    for (const a of fails) {
+      console.log(`    ✗ ${ago(a.ts)} in ${color.bold(a.symbol)} — ${color.dim(a.preview || '(no preview)')}`);
+      if (a.errorSignature) console.log(`      ${color.red('because:')} ${a.errorSignature}`);
+    }
+    // walls: same signature more than once
+    const bySig = new Map();
+    for (const a of fails) {
+      const s = a.errorSignature || '(no signature)';
+      bySig.set(s, (bySig.get(s) || 0) + 1);
+    }
+    const walls = [...bySig.entries()].filter(([, n]) => n > 1);
+    if (walls.length) {
+      console.log('');
+      for (const [sig, n] of walls) {
+        console.log(`  ${color.yellow('⚠ wall:')} ${n} different attempts all died on ${color.bold(sig)}`);
+      }
+      console.log(color.dim('    Multiple approaches, same error — question the diagnosis, not the patch.'));
+    }
+    console.log('');
+  }
+  if (retired.length) {
+    console.log(color.gray(`  ${retired.length} old failure(s) retired:`));
+    for (const a of retired) {
+      const by = a.retiredBy === 'human' ? 'a human override (rl unblock)' : 'a later passing run';
+      console.log(`    ∅ ${color.dim(`${a.preview || a.intentHash.slice(0, 8)} — retired by ${by}`)}`);
+    }
+    console.log('');
+  }
+  if (passes.length) {
+    console.log(color.green(`  ${passes.length} attempt(s) passed verification:`));
+    for (const a of passes) console.log(`    ✓ ${ago(a.ts)} in ${color.bold(a.symbol)} — ${color.dim(a.preview || '')}`);
+    console.log('');
+  }
+  if (pending.length) {
+    console.log(color.yellow(`  ${pending.length} attempt(s) still awaiting a test/build verdict.`));
+    console.log('');
+  }
+  console.log(color.dim(`  Full history: rl show ${file} · clusters: rl show --by-error`));
+  return 0;
+}
+
+async function cmdDoctorExplain(args) {
+  const idx = args.indexOf('--explain');
+  let text = args.slice(idx + 1).join(' ');
+  if (!text) text = await readStdin();
+  if (!text) {
+    console.error(color.red('Usage: rl doctor --explain "<test output>"  (or pipe the output via stdin)'));
+    return 1;
+  }
+  const r = explainOutcome(text);
+  console.log(`${color.bold('Classification:')} ${r.outcome === 'fail' ? color.red('FAIL') : r.outcome === 'pass' ? color.green('PASS') : color.yellow('ambiguous (left pending)')}`);
+  if (r.errorSignature) console.log(`${color.bold('Error signature:')} ${r.errorSignature}`);
+  if (r.matches.length) {
+    console.log(color.bold('Decided by:'));
+    for (const m of r.matches) console.log(`  toolchain=${color.cyan(m.toolchain)} kind=${m.kind} pattern=${color.dim(m.pattern)}`);
+  } else {
+    console.log(color.dim('No pattern matched — RegressionLedger would leave the attempts pending rather than guess.'));
+    console.log(color.dim('If this output is from a real test runner, please open an issue with it — adding runners is the canonical first PR.'));
+  }
+  return 0;
+}
+
 function cmdUnblock(args) {
   const file = args.find((a) => !a.startsWith('-'));
   if (!file) {
@@ -358,7 +444,9 @@ export async function main(argv) {
     case 'stats':
       return cmdStats(args);
     case 'doctor':
-      return cmdDoctor();
+      return args.includes('--explain') ? cmdDoctorExplain(args) : cmdDoctor();
+    case 'why':
+      return cmdWhy(args);
     case 'report':
       return cmdReport(args);
     case 'unblock':
