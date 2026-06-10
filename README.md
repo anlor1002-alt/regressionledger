@@ -28,9 +28,7 @@ RegressionLedger is a tiny, **zero-dependency** Claude Code hook + CLI that:
    re-apply a patch that previously failed, telling it *exactly why* and to
    change strategy.
 
-<!-- Demo GIF: run `bash scripts/record-demo.sh`, commit demo/regressionledger.gif, then uncomment:
 ![RegressionLedger blocking a repeat failed fix](demo/regressionledger.gif)
--->
 
 ```
 ⛔ BLOCKED before it could waste another test cycle:
