@@ -83,6 +83,7 @@ function safeRead(filePath) {
 }
 
 function relativeTime(ts) {
+  if (!Number.isFinite(ts)) return 'previously';
   const ms = Date.now() - ts;
   const min = Math.round(ms / 60000);
   if (min < 1) return 'moments ago';
@@ -118,15 +119,20 @@ const STRUCT_THRESHOLD = 0.95;
  * Find a recorded FAILED attempt whose structural skeleton matches the
  * proposed edit even though its semantic fingerprint did not.
  */
-function findParaphrasedFailure(root, file, fp, config) {
+function findParaphrasedFailure(root, file, fp) {
+  const target = structureTokens(Array.isArray(fp.tokens) ? fp.tokens : []);
+  // Too short = ubiquitous idiom shapes (guard clauses) — meaningless matches.
+  // Too long = whole-file Writes — the semantic channel already covers those,
+  // and shingling huge streams against every attempt is real synchronous latency.
+  if (target.length < 15 || target.length > 3000) return null;
   const ledger = loadLedger(root);
-  const target = structureTokens(fp.tokens);
-  if (target.length < 8) return null; // too short to call a "shape"
   let best = null;
   for (const a of ledger.attempts) {
     if (a.outcome !== 'fail') continue;
     if (a.file !== file) continue;
-    const sim = tokenSimilarity(structureTokens(a.tokens || []), target);
+    const aTokens = Array.isArray(a.tokens) ? a.tokens : [];
+    if (aTokens.length === 0 || aTokens.length > 3000) continue;
+    const sim = tokenSimilarity(structureTokens(aTokens), target);
     if (sim >= STRUCT_THRESHOLD && (!best || sim > best.similarity)) {
       best = { attempt: a, similarity: Math.round(sim * 100) / 100 };
       if (sim === 1) break;
@@ -202,7 +208,7 @@ export function handlePreToolUse(input) {
     // renamed/paraphrased re-application), never block — annotate. False
     // positives here cost nothing; silence would cost a cycle.
     if (hit) continue;
-    const para = findParaphrasedFailure(root, rel, fp, config);
+    const para = findParaphrasedFailure(root, rel, fp);
     if (para) {
       const pct = Math.round(para.similarity * 100);
       debug('PARAPHRASE NOTE', rel, fp.symbol, para.similarity);
@@ -304,8 +310,10 @@ export function handlePostToolUse(input) {
         `Don't re-apply those same patches — try a different approach.`;
       // Thrash escalation: many DIFFERENT approaches dying on one wall is the
       // doom loop blocking alone can't catch. Force a strategy checkpoint.
-      const wall = detectThrashWall(root);
-      if (wall && errorSignature && wall.signature === errorSignature) {
+      // Evaluate the wall for THE signature just hit (an old, larger wall must
+      // never shadow a fresh one).
+      const wall = errorSignature ? detectThrashWall(root, errorSignature) : null;
+      if (wall) {
         msg =
           `RegressionLedger ESCALATION: ${wall.distinct} distinct approaches have now failed with the same error — ` +
           `"${wall.signature}" (${wall.files.join(', ')}). The patches differ; the error doesn't. That means the ` +

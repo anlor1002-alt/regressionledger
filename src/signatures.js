@@ -20,7 +20,7 @@ export const TOOLCHAINS = [
     ],
     fail: [/(^|\n)\s*FAIL\s/, /\bTests?:.*?[1-9]\d*\s+failed/i],
     failCounts: [/(\d+)\s+failed\b/i, /(\d+)\s+failing\b/i],
-    pass: [/(^|\n)\s*PASS\s/, /\bTests?:.*?\b0 failed/i, /\b\d+\s+passed\b/i, /\b\d+\s+passing\b/i],
+    pass: [/(^|\n)\s*PASS\s/, /\bTests?:.*?\b0 failed/i, /\b[1-9]\d*\s+passed\b/i, /\b[1-9]\d*\s+passing\b/i],
     signatures: [
       /^.*\b(?:AssertionError|TypeError|ReferenceError|SyntaxError|RangeError)\b.*$/m,
       /^.*\bExpected\b.*$/m,
@@ -40,7 +40,7 @@ export const TOOLCHAINS = [
     commands: [/\bpytest\b/i, /\bpython\d?\s+-m\s+(?:pytest|unittest)\b/i, /\btox\b|\bnox\b/i],
     fail: [/Traceback \(most recent call last\)/, /=+\s*\d+\s+failed/i, /(^|\n)FAILED\b/],
     failCounts: [/(\d+)\s+failed\b/i, /(\d+)\s+error(?:s)?\s*=/i],
-    pass: [/=+\s*\d+\s+passed[^=]*=+/i, /\bOK\b\s*$/m],
+    pass: [/=+\s*\d+\s+passed[^=]*=+/i, /^OK(\s*\(\d+ tests?[^)]*\))?\s*$/m],
     signatures: [
       /^.*\b(?:AssertionError|ValueError|KeyError|AttributeError|TypeError|IndexError)\b.*$/m,
       /^E\s+.*$/m,
@@ -51,13 +51,16 @@ export const TOOLCHAINS = [
     commands: [/\bgo\s+(?:test|build|vet)\b/i],
     fail: [/(^|\n)-+\s*FAIL\b/i, /(^|\n)FAIL\b/],
     failCounts: [],
-    pass: [/(^|\n)ok\s/, /(^|\n)PASS\b/],
+    pass: [/(^|\n)ok\s+\S+\s+[\d.]+m?s/, /(^|\n)PASS\b/],
     signatures: [/^.*--- FAIL: .*$/m, /^.*\.go:\d+:.*$/m, /^.*panic:.*$/m],
   },
   {
     name: 'cargo',
     commands: [/\bcargo\s+(?:test|build|check|clippy)\b/i],
-    fail: [/test result:\s*FAILED/i, /(^|\n)\s*error(\[E\d+\])?:/, /(^|\n)\s*panic:/],
+    // NOTE: deliberately NOT a bare `error:` — passing test runs commonly log
+    // lines like "console.error / error: connection retry"; only rustc's
+    // coded form proves a failure.
+    fail: [/test result:\s*FAILED/i, /(^|\n)error\[E\d+\]:/, /(^|\n)\s*panic(ked at|:)/],
     failCounts: [/(\d+)\s+failed[;,]/i],
     pass: [/test result:\s*ok\b/i, /Compiling.*Finished/s],
     signatures: [/^.*error(\[E\d+\])?:.*$/m, /^.*panicked at.*$/m],
@@ -80,7 +83,9 @@ export const TOOLCHAINS = [
   },
   {
     name: 'gradle/maven',
-    commands: [/\b(?:gradle|mvn|\.\/gradlew|\.\/mvnw)\b/i],
+    // Gated on test/build goals: "mvn dependency:tree" prints BUILD SUCCESS
+    // too, and must not resolve pending attempts as passes.
+    commands: [/(?:\b(?:gradle|mvn)\b|\.\/(?:gradlew|mvnw)\b).*\b(?:test|build|verify|check|package)\b/i],
     fail: [/BUILD\s+FAIL(?:ED|URE)/i, /Compilation (?:failed|error)/i],
     failCounts: [/Tests?\s+run:.*?Failures:\s*(\d+)/i],
     pass: [/BUILD\s+SUCCESS(?:FUL)?/i],
@@ -99,8 +104,24 @@ export const TOOLCHAINS = [
     commands: [/\bnpx?\s+(?:playwright|cypress)\b/i, /\bplaywright\s+test\b/i],
     fail: [],
     failCounts: [/(\d+)\s+failed\b/i],
-    pass: [/\b\d+\s+passed\b/i, /All specs passed/i],
+    pass: [/\b[1-9]\d*\s+passed\b/i, /All specs passed/i],
     signatures: [/^.*Error:.*$/m, /^\s+\d+\)\s.*$/m],
+  },
+  {
+    name: 'node-test',
+    commands: [/\bnode\s+--test\b/i],
+    fail: [/(^|\n)#\s*fail\s+[1-9]\d*/],
+    failCounts: [],
+    pass: [/(^|\n)#\s*fail\s+0\b/],
+    signatures: [/^.*\bAssertionError\b.*$/m, /^not ok .*$/m],
+  },
+  {
+    name: 'rspec/phpunit',
+    commands: [/\brspec\b/i, /\bphpunit\b/i, /\bbundle\s+exec\s+rspec\b/i],
+    fail: [/(^|\n)Failures:/],
+    failCounts: [/(\d+)\s+failures?\b/i, /Failures:\s*(\d+)/i],
+    pass: [/\b\d+\s+examples?,\s+0\s+failures/i, /OK \(\d+ tests?/i],
+    signatures: [/^.*Failure\/Error:.*$/m, /^.*\bExpected\b.*$/m],
   },
   {
     name: 'make/generic-build',
@@ -121,7 +142,7 @@ export const GENERIC = {
     /\bexit code:?\s*[1-9]\d*\b/i,
   ],
   failCounts: [/(\d+)\s+(?:tests?\s+)?fail(?:ed|ing)\b/i],
-  pass: [/\b\d+\s+passing\b/i, /\b\d+\s+passed\b/i, /\bexit code:?\s*0\b/i, /\b0 problems\b/i],
+  pass: [/\b[1-9]\d*\s+passing\b/i, /\b[1-9]\d*\s+passed\b/i, /\bexit code:?\s*0\b/i, /\b0 problems\b/i],
   signatures: [
     /^.*\b(?:AssertionError|TypeError|ReferenceError|SyntaxError|ValueError|KeyError|NullPointerException)\b.*$/m,
     /^.*\bFAIL\b.*$/m,

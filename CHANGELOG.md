@@ -6,6 +6,37 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-06-10
+
+Hardening release: every fix below came from an independent adversarial review
+of v0.6–v0.8, each finding verified by execution before fixing. 9 new
+regression tests.
+
+### Fixed
+- **Thrash escalation** now evaluates the wall for the signature *just hit* —
+  previously one old, larger wall silenced every new wall forever.
+- **`rl import` hardened**: strict type validation, field truncation
+  (preview/signature), `maxLedger` cap enforcement, and clean errors on
+  non-export files. A hostile or hand-edited import can no longer grow an
+  unbounded ledger or inject unbounded text into deny messages.
+- **Malformed ledger entries can no longer silently disable the guardrail**:
+  non-array `tokens` or non-string `intentHash` previously threw inside the
+  hook (caught as fail-open ⇒ blocking and briefing silently dead for that
+  file). All read paths now guard types.
+- **Misclassification regressions from the v0.7.0 registry rewrite**: bare
+  `error:` prose in passing runs no longer records a FAIL (rustc form
+  `error[E…]:` still does); `mvn dependency:tree` / `gradle --version` no
+  longer count as verification runs; prose "ok …"/"200 OK"/"0 passed" no
+  longer count as passes; explicit toolchain pass evidence now outranks
+  generic fail substrings.
+- Restored runners lost in the rewrite: **rspec, phpunit**; added
+  **`node --test`** (TAP summary) as a recognized runner.
+- Structural channel: minimum shape floor raised 8→15 tokens (guard-clause
+  idioms no longer produce misleading paraphrase notes); token cap (3000)
+  keeps whole-file Writes from adding seconds of synchronous latency.
+- Session briefing: survives malformed entries, fences ledger text as
+  historical data, and caps length accounting for JSON escaping.
+
 ## [0.8.0] - 2026-06-10
 
 The "Sixth Sense" release — capabilities no other agent tool ships.
@@ -137,7 +168,8 @@ First public release.
 - **Zero runtime dependencies**; hooks fail open on any error.
 - 35 tests (`node:test`) and a no-Claude doom-loop demo (`npm run demo`).
 
-[Unreleased]: https://github.com/anlor1002-alt/regressionledger/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/anlor1002-alt/regressionledger/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/anlor1002-alt/regressionledger/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.5.0...v0.6.0

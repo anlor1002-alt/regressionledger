@@ -68,6 +68,17 @@ export function explainOutcome(text = '') {
       return { outcome: 'fail', errorSignature: extractSignature(t, text), matches };
     }
   }
+  // A toolchain's EXPLICIT pass evidence outranks GENERIC fail substrings —
+  // a passing verbose run may mention "AssertionError" inside a test name, and
+  // that must not convert a real pass into a recorded failure.
+  for (const t of TOOLCHAINS) {
+    const ok = firstMatch(t.pass, text);
+    if (ok) {
+      matches.push({ toolchain: t.name, kind: 'pass', pattern: String(ok) });
+      return { outcome: 'pass', errorSignature: null, matches };
+    }
+  }
+
   const gHard = firstMatch(GENERIC.fail, text);
   if (gHard) {
     matches.push({ toolchain: 'generic', kind: 'fail', pattern: String(gHard) });
@@ -79,14 +90,6 @@ export function explainOutcome(text = '') {
     return { outcome: 'fail', errorSignature: extractSignature(null, text), matches };
   }
 
-  // Then PASS evidence.
-  for (const t of TOOLCHAINS) {
-    const ok = firstMatch(t.pass, text);
-    if (ok) {
-      matches.push({ toolchain: t.name, kind: 'pass', pattern: String(ok) });
-      return { outcome: 'pass', errorSignature: null, matches };
-    }
-  }
   const gOk = firstMatch(GENERIC.pass, text);
   if (gOk) {
     matches.push({ toolchain: 'generic', kind: 'pass', pattern: String(gOk) });

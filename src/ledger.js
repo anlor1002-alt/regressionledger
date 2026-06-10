@@ -163,7 +163,9 @@ export function findSimilarFailure(root, target, config = loadConfig(root)) {
     if (a.intentHash === target.intentHash) {
       sim = 1;
     } else {
-      sim = tokenSimilarity(a.tokens || [], target.tokens || []);
+      const aTokens = Array.isArray(a.tokens) ? a.tokens : [];
+      const tTokens = Array.isArray(target.tokens) ? target.tokens : [];
+      sim = tokenSimilarity(aTokens, tTokens);
     }
     if (sim >= config.threshold) {
       failCount++;
@@ -189,7 +191,7 @@ export function unblockAttempts(root, file, hashPrefix = '') {
     for (const a of ledger.attempts) {
       if (a.outcome !== 'fail') continue;
       if (a.file !== file) continue;
-      if (hashPrefix && !a.intentHash.startsWith(hashPrefix)) continue;
+      if (hashPrefix && !String(a.intentHash || '').startsWith(hashPrefix)) continue;
       a.outcome = 'retired';
       a.retiredTs = now;
       a.retiredBy = 'human';
@@ -207,20 +209,54 @@ export function unblockAttempts(root, file, hashPrefix = '') {
  * entries are skipped (only settled verdicts travel).
  * @returns {{added:number, skipped:number}}
  */
+const VALID_OUTCOMES = new Set(['fail', 'pass', 'retired']);
+const str = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
+
 export function importAttempts(root, attempts, from = 'import') {
   return withLock(root, () => {
     const ledger = loadLedger(root);
+    const config = loadConfig(root);
     const have = new Set(ledger.attempts.map((a) => a.id));
     let added = 0;
     let skipped = 0;
-    for (const a of attempts || []) {
-      if (!a || !a.id || !a.file || !a.intentHash || have.has(a.id) || a.outcome === 'pending') {
+    for (const a of Array.isArray(attempts) ? attempts : []) {
+      // Strict validation: imports are an untrusted, cross-machine channel.
+      const ok =
+        a &&
+        typeof a === 'object' &&
+        typeof a.id === 'string' &&
+        typeof a.file === 'string' &&
+        typeof a.intentHash === 'string' &&
+        VALID_OUTCOMES.has(a.outcome) &&
+        !have.has(a.id);
+      if (!ok) {
         skipped++;
         continue;
       }
-      ledger.attempts.push({ ...a, importedFrom: a.importedFrom || from });
+      ledger.attempts.push({
+        id: a.id.slice(0, 64),
+        ts: Number(a.ts) || Date.now(),
+        session: str(a.session, 64) || 'imported',
+        file: a.file.slice(0, 500),
+        symbol: str(a.symbol, 200) || '(file scope)',
+        intentHash: a.intentHash.slice(0, 64),
+        tokens: Array.isArray(a.tokens) ? a.tokens.filter((t) => typeof t === 'string').slice(0, 5000) : [],
+        preview: str(a.preview, 120),
+        tool: str(a.tool, 32) || 'Edit',
+        outcome: a.outcome,
+        errorSignature: str(a.errorSignature, 200) || null,
+        resolvedTs: Number(a.resolvedTs) || null,
+        retiredTs: Number(a.retiredTs) || undefined,
+        retiredBy: str(a.retiredBy, 16) || undefined,
+        supersededBy: str(a.supersededBy, 64) || undefined,
+        importedFrom: str(a.importedFrom, 200) || from,
+      });
       have.add(a.id);
       added++;
+    }
+    // Imports respect the same cap as organic recording.
+    if (ledger.attempts.length > config.maxLedger) {
+      ledger.attempts = ledger.attempts.slice(ledger.attempts.length - config.maxLedger);
     }
     if (added) saveLedger(root, ledger);
     return { added, skipped };

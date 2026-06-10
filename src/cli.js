@@ -165,8 +165,10 @@ function cmdStatsCard(s, blocked, warned) {
   const top = '╭' + '─'.repeat(W) + '╮';
   const bot = '╰' + '─'.repeat(W) + '╯';
   const row = (text) => {
-    // pad by VISIBLE length — strip ANSI color codes before measuring
-    const len = [...String(text).replace(new RegExp(String.fromCharCode(27) + '\[[0-9;]*m', 'g'), '')].length;
+    // pad by VISIBLE length: strip ANSI codes, count wide emoji as 2 columns
+    const plain = String(text).replace(new RegExp(String.fromCharCode(27) + '\\[[0-9;]*m', 'g'), '');
+    const wide = (plain.match(/[⛔⚠]/g) || []).length;
+    const len = [...plain].length + wide;
     return '│ ' + text + ' '.repeat(Math.max(0, W - 2 - len)) + ' │';
   };
   const lines = [
@@ -399,6 +401,10 @@ function cmdImport(args) {
     data = JSON.parse(readFileSync(file, 'utf8').replace(/^﻿/, ''));
   } catch (err) {
     console.error(color.red(`Cannot read ${file}: ${err.message}`));
+    return 1;
+  }
+  if (!data || typeof data !== 'object' || !Array.isArray(data.attempts)) {
+    console.error(color.red(`${file} is not a RegressionLedger export (missing "attempts" array).`));
     return 1;
   }
   const { added, skipped } = importAttempts(resolveRoot(), data.attempts, file);
