@@ -44,7 +44,7 @@ ${color.bold('Usage')}
   rl show [file] [--by-error]  Attempt history; --by-error clusters failures by error signature
   rl report [--html [file]]    Shareable report: markdown to stdout, or a self-contained HTML file
   rl list [--json]             Flat list of every recorded attempt
-  rl stats                     Summary counts, including blocked / would-have-blocked hits
+  rl stats [--card]            Summary counts; --card prints a shareable screenshot card
   rl config [key value]        View or change settings (mode, threshold, minFailures, crossSymbol, maxLedger)
   rl unblock <file> [hash]     Retire recorded failures for a file (the context truly changed)
   rl clear --force             Erase the ledger
@@ -154,12 +154,39 @@ function cmdList(args) {
   return 0;
 }
 
-function cmdStats() {
+function cmdStatsCard(s, blocked, warned) {
+  const W = 46;
+  const top = '╭' + '─'.repeat(W) + '╮';
+  const bot = '╰' + '─'.repeat(W) + '╯';
+  const row = (text) => {
+    // pad by VISIBLE length — strip ANSI color codes before measuring
+    const len = [...String(text).replace(new RegExp(String.fromCharCode(27) + '\[[0-9;]*m', 'g'), '')].length;
+    return '│ ' + text + ' '.repeat(Math.max(0, W - 2 - len)) + ' │';
+  };
+  const lines = [
+    top,
+    row(color.bold('RegressionLedger')),
+    row(''),
+    row(`${color.red('⛔ ' + blocked)} repeat fix${blocked === 1 ? '' : 'es'} blocked`),
+    row(`${color.yellow('⚠ ' + warned)} would-have-blocked (warn mode)`),
+    row(`${color.dim(`${s.total} attempts · ${s.fail} failed · ${s.pass} passed`)}`),
+    row(''),
+    row(color.dim('every block = a failing test cycle')),
+    row(color.dim('that never had to run')),
+    bot,
+    color.dim('  github.com/anlor1002-alt/regressionledger'),
+  ];
+  console.log(lines.join('\n'));
+  return 0;
+}
+
+function cmdStats(args = []) {
   const root = resolveRoot();
   const s = summarize(root);
   const hits = loadHits(root);
   const blocked = hits.filter((h) => h.mode === 'block').length;
   const warned = hits.filter((h) => h.mode === 'warn').length;
+  if (args.includes('--card')) return cmdStatsCard(s, blocked, warned);
   console.log(`${color.bold('RegressionLedger stats')}`);
   console.log(`  attempts : ${s.total}`);
   console.log(`  ${color.green('passed')}   : ${s.pass}`);
@@ -327,7 +354,7 @@ export async function main(argv) {
     case 'list':
       return cmdList(args);
     case 'stats':
-      return cmdStats();
+      return cmdStats(args);
     case 'doctor':
       return cmdDoctor();
     case 'report':

