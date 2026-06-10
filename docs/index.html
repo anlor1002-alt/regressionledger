@@ -70,10 +70,18 @@
 
   <h2>How it works</h2>
   <div class="cards">
-    <div class="card"><b>🧬 Fingerprint</b><span>Every edit becomes a normalized token stream — cosmetic diffs collide, <code class="inline">true</code> ≠ <code class="inline">false</code> doesn't.</span></div>
-    <div class="card"><b>🔗 Link outcomes</b><span>The next test/build run (jest, pytest, go, cargo, tsc…) marks those edits pass or fail, capturing the error.</span></div>
+    <div class="card"><b>🧬 Fingerprint</b><span>Every edit becomes a normalized token stream — cosmetic diffs collide, <code class="inline">true</code> ≠ <code class="inline">false</code> doesn't. A second, structure-only channel catches renamed re-applications.</span></div>
+    <div class="card"><b>🔗 Link outcomes</b><span>The next test/build run (11 toolchains: jest, vitest, pytest, go, cargo, tsc, eslint…) marks those edits pass or fail, capturing the error.</span></div>
     <div class="card"><b>💾 Remember</b><span>A local JSON ledger survives restarts and context compaction. No network, no keys, no database.</span></div>
-    <div class="card"><b>⛔ Block</b><span>Re-applying a failed fix is denied at PreToolUse with the original error attached. Warn-only mode available.</span></div>
+    <div class="card"><b>⛔ Block</b><span>Re-applying a failed fix is denied at PreToolUse with the original error attached. Warn-only mode + <code class="inline">minFailures</code> for cautious rollouts.</span></div>
+  </div>
+
+  <h2>Things no other tool does</h2>
+  <div class="cards">
+    <div class="card"><b>🧠 Session briefing</b><span>On every session start — including right after compaction wipes the agent's memory — a SessionStart hook injects "what already failed here". Dead ends are blocked before they're re-<i>conceived</i>.</span></div>
+    <div class="card"><b>🌀 Thrash escalation</b><span>3+ different fixes dying on one error = the diagnosis is wrong, not the patches. The hook stops the loop and demands root-cause hypotheses.</span></div>
+    <div class="card"><b>🤝 Herd immunity</b><span><code class="inline">rl export</code> / <code class="inline">rl import</code>: your agent inherits the dead ends a teammate's agent already paid for — attributed and auditable.</span></div>
+    <div class="card"><b>📊 Provable</b><span>Deterministic benchmark: 120/120 disguised repeats caught, 0/190 false blocks. Run <code class="inline">npm run bench</code> yourself.</span></div>
   </div>
 
   <h2>Install</h2>
