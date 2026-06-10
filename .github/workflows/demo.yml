@@ -21,19 +21,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
       - name: Install ffmpeg, ttyd, and VHS
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q ffmpeg
           curl -fsSL https://github.com/tsl0922/ttyd/releases/latest/download/ttyd.x86_64 -o /tmp/ttyd
           sudo install /tmp/ttyd /usr/local/bin/ttyd
-          sudo mkdir -p /etc/apt/keyrings
-          curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
-          echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
-          sudo apt-get update -q
-          sudo apt-get install -y -q vhs
+          go install github.com/charmbracelet/vhs@latest
       - name: Render the tape
-        run: vhs demo/regressionledger.tape
+        run: "$(go env GOPATH)/bin/vhs" demo/regressionledger.tape
       - name: Commit the GIF
         run: |
           git config user.name "github-actions[bot]"
