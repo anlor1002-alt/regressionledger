@@ -1,0 +1,34 @@
+name: Render demo GIF
+
+# Renders demo/regressionledger.tape with VHS on a runner (no local TTY needed)
+# and commits the resulting GIF back to main.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "demo/regressionledger.tape"
+      - "demo/simulate.js"
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: charmbracelet/vhs-action@v2
+        with:
+          path: demo/regressionledger.tape
+      - name: Commit the GIF
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add demo/regressionledger.gif
+          git diff --cached --quiet && echo "no changes" && exit 0
+          git commit -m "chore: render demo GIF via VHS [skip ci]"
+          git push
