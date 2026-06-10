@@ -31,8 +31,9 @@ jobs:
           curl -fsSL https://github.com/tsl0922/ttyd/releases/latest/download/ttyd.x86_64 -o /tmp/ttyd
           sudo install /tmp/ttyd /usr/local/bin/ttyd
           go install github.com/charmbracelet/vhs@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Render the tape
-        run: "$(go env GOPATH)/bin/vhs" demo/regressionledger.tape
+        run: vhs demo/regressionledger.tape
       - name: Commit the GIF
         run: |
           git config user.name "github-actions[bot]"
