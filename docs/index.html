@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RegressionLedger — stop your coding agent from re-trying failed fixes</title>
+<meta name="description" content="A zero-dependency Claude Code hook + CLI that fingerprints edits, links them to test/build outcomes, and blocks repeat failed fixes across sessions.">
+<meta property="og:title" content="RegressionLedger">
+<meta property="og:description" content="Stop your coding agent from resurrecting fixes that already failed. Zero-dependency, offline, MIT.">
+<meta property="og:type" content="website">
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --line: #30363d;
+    --ink: #e6edf3; --soft: #8b949e; --accent: #f85149; --good: #3fb950; --link: #58a6ff;
+    --mono: ui-monospace, SFMono-Regular, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 16px/1.65 -apple-system, "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px 80px; }
+  header { padding: 72px 0 36px; text-align: center; }
+  h1 { font-size: 2.6rem; letter-spacing: -1px; }
+  h1 .red { color: var(--accent); }
+  .tag { color: var(--soft); font-size: 1.15rem; max-width: 620px; margin: 14px auto 0; }
+  .btns { margin-top: 28px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn { display: inline-block; padding: 10px 22px; border-radius: 8px; text-decoration: none; font-weight: 600; }
+  .btn.primary { background: #238636; color: #fff; }
+  .btn.ghost { border: 1px solid var(--line); color: var(--ink); }
+  .btn:hover { filter: brightness(1.15); }
+  .term {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    font-family: var(--mono); font-size: .86rem; padding: 22px 26px; margin: 40px 0;
+    overflow-x: auto; line-height: 1.7; white-space: pre; text-align: left;
+  }
+  .term .r { color: var(--accent); font-weight: 700; }
+  .term .d { color: var(--soft); }
+  .term .g { color: var(--good); }
+  h2 { margin: 56px 0 16px; font-size: 1.5rem; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 18px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+  .card b { display: block; margin-bottom: 6px; }
+  .card span { color: var(--soft); font-size: .92rem; }
+  code.inline { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; font-family: var(--mono); font-size: .85em; }
+  pre.cmd { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; font-family: var(--mono); font-size: .88rem; overflow-x: auto; margin-top: 12px; }
+  a { color: var(--link); }
+  footer { margin-top: 70px; padding-top: 24px; border-top: 1px solid var(--line); color: var(--soft); font-size: .88rem; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Regression<span class="red">Ledger</span></h1>
+    <p class="tag">Stop your coding agent from resurrecting fixes that <b>already failed</b>. A zero-dependency Claude Code hook + CLI with cross-session memory of every attempt.</p>
+    <div class="btns">
+      <a class="btn primary" href="https://github.com/anlor1002-alt/regressionledger">View on GitHub</a>
+      <a class="btn ghost" href="https://github.com/anlor1002-alt/regressionledger#install">Install</a>
+    </div>
+  </header>
+
+  <div class="term"><span class="d">▶ Session 2 — the agent has forgotten everything, and proposes the SAME fix as before…</span>
+
+<span class="r">⛔ BLOCKED</span> before it could waste another test cycle:
+
+   RegressionLedger: you already tried the same fix to src/auth.js 2 hours ago.
+   It failed with: <span class="r">AssertionError: expected 200, got 401</span>
+   Re-applying it will reproduce the same failure. <b>Change strategy instead.</b>
+   Run <span class="g">rl show src/auth.js</span> to see the full attempt history.</div>
+
+  <h2>Why</h2>
+  <p>Agents lose their memory when the context window fills up — then confidently re-apply a patch they already tried two prompts (or two sessions) ago. Same wrong fix, same red test, credits gone. In-session loop detectors don't survive the reset; memory layers only <i>advise</i>, and the model ignores advice. RegressionLedger remembers <b>what was tried and what it broke</b>, and enforces it.</p>
+
+  <h2>How it works</h2>
+  <div class="cards">
+    <div class="card"><b>🧬 Fingerprint</b><span>Every edit becomes a normalized token stream — cosmetic diffs collide, <code class="inline">true</code> ≠ <code class="inline">false</code> doesn't.</span></div>
+    <div class="card"><b>🔗 Link outcomes</b><span>The next test/build run (jest, pytest, go, cargo, tsc…) marks those edits pass or fail, capturing the error.</span></div>
+    <div class="card"><b>💾 Remember</b><span>A local JSON ledger survives restarts and context compaction. No network, no keys, no database.</span></div>
+    <div class="card"><b>⛔ Block</b><span>Re-applying a failed fix is denied at PreToolUse with the original error attached. Warn-only mode available.</span></div>
+  </div>
+
+  <h2>Install</h2>
+  <p>As a Claude Code plugin (hooks activate automatically):</p>
+  <pre class="cmd">/plugin marketplace add anlor1002-alt/regressionledger
+/plugin install regressionledger@anlor1002-plugins</pre>
+  <p style="margin-top:14px">Or wire it manually into a project:</p>
+  <pre class="cmd">npx regressionledger init</pre>
+
+  <footer>
+    MIT licensed · zero dependencies · offline · fails open ·
+    <a href="https://github.com/anlor1002-alt/regressionledger">github.com/anlor1002-alt/regressionledger</a>
+  </footer>
+</div>
+</body>
+</html>
