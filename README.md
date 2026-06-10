@@ -145,6 +145,7 @@ It runs itself. The commands you'll actually use:
 | `rl stats` | Summary counts, plus how many repeat fixes were blocked (or would have been, in warn mode). |
 | `rl list [--json]` | Flat list of every attempt. |
 | `rl config` | View settings. `rl config mode warn`, `rl config threshold 0.85`, … |
+| `rl unblock <file>` | Retire recorded failures for a file when the context genuinely changed — they stop blocking but stay auditable (∅ retired, with a receipt). |
 | `rl clear --force` | Wipe the ledger. |
 
 ## Configuration

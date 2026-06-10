@@ -123,14 +123,21 @@ export function resolvePending(root, session, outcome, errorSignature = null) {
       }
     }
     if (outcome === 'pass' && justResolved.length) {
-      const passedKeys = new Set(justResolved.map((a) => `${a.file}::${a.intentHash}`));
-      ledger.attempts = ledger.attempts.filter((a) => {
-        const isStaleFail =
-          a.outcome === 'fail' &&
-          !justResolved.includes(a) &&
-          passedKeys.has(`${a.file}::${a.intentHash}`);
-        return !isStaleFail;
-      });
+      // Retire (don't delete) stale failures that this pass supersedes — the
+      // retirement keeps a receipt: which attempt superseded it and when.
+      // Retired entries stop blocking (matching is outcome === 'fail' only)
+      // but remain auditable in `rl show` / `rl report`.
+      const passedByKey = new Map(justResolved.map((a) => [`${a.file}::${a.intentHash}`, a.id]));
+      for (const a of ledger.attempts) {
+        if (a.outcome !== 'fail' || justResolved.includes(a)) continue;
+        const supersededBy = passedByKey.get(`${a.file}::${a.intentHash}`);
+        if (supersededBy) {
+          a.outcome = 'retired';
+          a.retiredTs = now;
+          a.retiredBy = 'pass';
+          a.supersededBy = supersededBy;
+        }
+      }
     }
     if (justResolved.length) saveLedger(root, ledger);
     return justResolved.length;
@@ -164,6 +171,33 @@ export function findSimilarFailure(root, target, config = loadConfig(root)) {
     }
   }
   return best ? { ...best, failCount } : null;
+}
+
+/**
+ * Human override: retire failed attempts for a file (optionally narrowed by an
+ * intentHash prefix) so they stop blocking. Use when the context genuinely
+ * changed (new DB, new dependency version…) and a recorded failure no longer
+ * applies. Deliberately explicit — the "it's different this time" claim costs
+ * one human decision instead of agent confidence.
+ * @returns the number of attempts retired.
+ */
+export function unblockAttempts(root, file, hashPrefix = '') {
+  return withLock(root, () => {
+    const ledger = loadLedger(root);
+    const now = Date.now();
+    let n = 0;
+    for (const a of ledger.attempts) {
+      if (a.outcome !== 'fail') continue;
+      if (a.file !== file) continue;
+      if (hashPrefix && !a.intentHash.startsWith(hashPrefix)) continue;
+      a.outcome = 'retired';
+      a.retiredTs = now;
+      a.retiredBy = 'human';
+      n++;
+    }
+    if (n) saveLedger(root, ledger);
+    return n;
+  });
 }
 
 // ---- hit log: every block (or would-have-blocked warn) is recorded so users

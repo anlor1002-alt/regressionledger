@@ -15,6 +15,7 @@ export {
   findSimilarFailure,
   recordHit,
   loadHits,
+  unblockAttempts,
   summarize,
   DEFAULT_CONFIG,
 } from './ledger.js';

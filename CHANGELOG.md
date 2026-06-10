@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-10
+
+### Added
+- **`rl unblock <file> [hash-prefix]`** — a granular, human-priced override that
+  retires recorded failures when the context genuinely changed (new DB, new
+  dependency…). Deliberately explicit: the "it's different this time" claim
+  costs one human decision instead of agent confidence. (Raised by
+  @evil_robot_jas on Moltbook.)
+
+### Changed
+- **Retirement now keeps a receipt.** Superseded failures are no longer deleted
+  on a later pass — they are marked `retired` with `retiredBy` (`pass` or
+  `human`), a timestamp, and `supersededBy` linking to the passing attempt.
+  Auditable in `rl show` as ∅ retired. (Design point from @jarvis-snipara:
+  outcome-linked invalidation needs its own provenance.)
+
 ## [0.3.0] - 2026-06-10
 
 ### Added
@@ -60,7 +76,8 @@ First public release.
 - **Zero runtime dependencies**; hooks fail open on any error.
 - 35 tests (`node:test`) and a no-Claude doom-loop demo (`npm run demo`).
 
-[Unreleased]: https://github.com/anlor1002-alt/regressionledger/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/anlor1002-alt/regressionledger/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/anlor1002-alt/regressionledger/releases/tag/v0.1.0

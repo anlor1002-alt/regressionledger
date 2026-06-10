@@ -19,6 +19,7 @@ import {
   saveConfig,
   summarize,
   loadHits,
+  unblockAttempts,
   DEFAULT_CONFIG,
 } from './ledger.js';
 import { handlePreToolUse, handlePostToolUse } from './hooks.js';
@@ -45,6 +46,7 @@ ${color.bold('Usage')}
   rl list [--json]             Flat list of every recorded attempt
   rl stats                     Summary counts, including blocked / would-have-blocked hits
   rl config [key value]        View or change settings (mode, threshold, minFailures, crossSymbol, maxLedger)
+  rl unblock <file> [hash]     Retire recorded failures for a file (the context truly changed)
   rl clear --force             Erase the ledger
   rl hook <event>              Internal: invoked by Claude Code (reads JSON on stdin)
 
@@ -57,6 +59,7 @@ ${color.dim('Docs: https://github.com/anlor1002-alt/regressionledger')}`;
 function icon(outcome) {
   if (outcome === 'fail') return color.red('✗ FAIL');
   if (outcome === 'pass') return color.green('✓ PASS');
+  if (outcome === 'retired') return color.gray('∅ retired');
   return color.yellow('… pending');
 }
 
@@ -237,6 +240,23 @@ function cmdReport(args) {
   return 0;
 }
 
+function cmdUnblock(args) {
+  const file = args.find((a) => !a.startsWith('-'));
+  if (!file) {
+    console.error(color.red('Usage: rl unblock <file> [intentHash-prefix]'));
+    return 1;
+  }
+  const hashPrefix = args.filter((a) => !a.startsWith('-'))[1] || '';
+  const n = unblockAttempts(resolveRoot(), file, hashPrefix);
+  if (!n) {
+    console.log(color.yellow(`No blocking failures found for "${file}"${hashPrefix ? ` with hash ${hashPrefix}…` : ''}.`));
+    return 0;
+  }
+  console.log(`${color.green('✓')} Retired ${n} failure record${n === 1 ? '' : 's'} for ${color.cyan(file)} — they will no longer block.`);
+  console.log(color.dim('They remain visible in `rl show` as ∅ retired, with the receipt that a human made the call.'));
+  return 0;
+}
+
 function cmdClear(args) {
   if (!args.includes('--force')) {
     console.error(color.yellow('Refusing to clear without --force. Run: rl clear --force'));
@@ -312,6 +332,8 @@ export async function main(argv) {
       return cmdDoctor();
     case 'report':
       return cmdReport(args);
+    case 'unblock':
+      return cmdUnblock(args);
     case 'config':
       return cmdConfig(args);
     case 'clear':
