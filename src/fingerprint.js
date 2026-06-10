@@ -41,6 +41,38 @@ function commentConfig(ext) {
 
 const STR = '"STR"';
 const NUM = '"NUM"';
+const ID = '"ID"';
+
+// Keywords kept verbatim in the STRUCTURAL channel (identifiers are erased
+// there, but control flow / declaration words carry real shape information).
+const STRUCT_KEYWORDS = new Set([
+  // js/ts
+  'function', 'return', 'if', 'else', 'for', 'while', 'do', 'switch', 'case',
+  'break', 'continue', 'const', 'let', 'var', 'class', 'new', 'try', 'catch',
+  'finally', 'throw', 'async', 'await', 'yield', 'import', 'export', 'default',
+  'typeof', 'instanceof', 'in', 'of', 'delete', 'void', 'this', 'super',
+  'true', 'false', 'null', 'undefined',
+  // python
+  'def', 'elif', 'except', 'raise', 'lambda', 'pass', 'with', 'as', 'from',
+  'not', 'and', 'or', 'is', 'None', 'True', 'False', 'global', 'nonlocal',
+  // go / rust / java-ish
+  'func', 'fn', 'pub', 'struct', 'enum', 'impl', 'match', 'defer', 'go',
+  'chan', 'select', 'static', 'final', 'public', 'private', 'protected',
+]);
+
+/**
+ * Collapse identifiers in a normalized token stream to an ID sentinel,
+ * keeping keywords, operators, punctuation, and the STR/NUM sentinels.
+ * The result is the "shape" of the code — renaming variables can't change it.
+ */
+export function structureTokens(tokens) {
+  return tokens.map((t) => {
+    if (t === STR || t === NUM) return t;
+    if (STRUCT_KEYWORDS.has(t)) return t;
+    if (/^[A-Za-z_$]/.test(t)) return ID;
+    return t;
+  });
+}
 
 /**
  * Lex `code` into a normalized token array. String and number literals collapse

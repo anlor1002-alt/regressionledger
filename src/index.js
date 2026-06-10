@@ -1,6 +1,6 @@
 // Public, programmatic surface — handy for tests and for embedding the engine
 // in other tools.
-export { tokenize, extractSymbol, fingerprint } from './fingerprint.js';
+export { tokenize, extractSymbol, fingerprint, structureTokens } from './fingerprint.js';
 export { tokenSimilarity, shingles, jaccard } from './similarity.js';
 export { isVerificationCommand, detectOutcome } from './outcome.js';
 export {

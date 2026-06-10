@@ -1,6 +1,6 @@
 {
   "name": "regressionledger",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Stop your coding agent from resurrecting fixes that already failed. A zero-dependency Claude Code hook + CLI that fingerprints every edit, links it to the test/build outcome, and HARD-BLOCKS the agent from re-applying a patch that previously failed — across sessions, surviving context compaction.",
   "type": "module",
   "bin": {

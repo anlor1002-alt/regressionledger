@@ -193,8 +193,10 @@ function cmdStats(args = []) {
   console.log(`  ${color.red('failed')}   : ${s.fail}`);
   console.log(`  ${color.yellow('pending')}  : ${s.pending}`);
   console.log(`  files    : ${s.files}`);
+  const noted = hits.filter((h) => h.mode === 'note').length;
   console.log(`  ${color.red('blocked repeat fixes')}        : ${blocked}`);
   console.log(`  ${color.yellow('would-have-blocked (warn)')}  : ${warned}`);
+  console.log(`  ${color.cyan('paraphrase notes')}           : ${noted}`);
   if (warned > 0) {
     console.log(color.dim(`  Review them with \`rl show\`, then enable hard-block: rl config mode block`));
   }

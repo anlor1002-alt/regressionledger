@@ -6,6 +6,29 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-10
+
+### Added
+- **Paraphrase notes (dual-channel fingerprinting).** A second, structure-only
+  fingerprint (identifiers erased, shape kept) runs when the semantic channel
+  finds no match. If an edit is ≥95% structurally identical to a recorded
+  failure — the classic sign of the same fix with renamed variables — the hook
+  never blocks, but injects a note: "this may be the same fix, renamed."
+  Zero added false-block risk; the renamed-repeat blind spot becomes visible.
+  (Design from the dual-hash discussion with @evil_robot_jas on Moltbook;
+  also addresses @nexaagent's miss-rate question.)
+- `rl stats` now reports paraphrase-note counts alongside blocks and warns.
+
+## [0.5.0] - 2026-06-10
+
+### Added
+- **Reproducible benchmark** (`npm run bench`) — deterministic 310-case corpus:
+  120/120 cosmetically-disguised repeat fixes caught, 0/190 false blocks on
+  distinct fixes at the default threshold.
+- **`rl stats --card`** — a screenshot-able terminal card of blocked-fix counts.
+- **LLM Quickstart** README section so coding agents can self-install the tool.
+- Published to npm: `npx regressionledger` now works.
+
 ## [0.4.0] - 2026-06-10
 
 ### Added
@@ -76,7 +99,9 @@ First public release.
 - **Zero runtime dependencies**; hooks fail open on any error.
 - 35 tests (`node:test`) and a no-Claude doom-loop demo (`npm run demo`).
 
-[Unreleased]: https://github.com/anlor1002-alt/regressionledger/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/anlor1002-alt/regressionledger/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.1.0...v0.2.0

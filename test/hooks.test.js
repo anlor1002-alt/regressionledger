@@ -113,6 +113,34 @@ test('minFailures=2 requires two failures before blocking', () => {
   assert.match(res.json.hookSpecificOutput.permissionDecisionReason, /failed 2 times/i);
 });
 
+test('paraphrased (renamed) repeat of a failed fix gets a NOTE, never a block', () => {
+  const { cwd, file } = project();
+  // Original fix fails. It's long enough to have a real "shape".
+  const original = 'const token = makeToken(user, options); if (!token) { return rejectAuth(user, "expired"); } return token;';
+  handlePostToolUse(edit(cwd, file, original, 's1'));
+  handlePostToolUse(bash(cwd, 'npm test', '1 failed\nAssertionError: still 401', 's1'));
+
+  // Same fix, every identifier renamed — semantic channel misses it.
+  const renamed = 'const tkn = createTok(usr, opts); if (!tkn) { return denyAccess(usr, "stale"); } return tkn;';
+  const res = handlePreToolUse(edit(cwd, file, renamed, 's2'));
+
+  assert.ok(res.json, 'expected a hook response');
+  const out = res.json.hookSpecificOutput;
+  assert.equal(out.permissionDecision, undefined, 'must NOT block on the structural channel');
+  assert.match(out.additionalContext, /structurally identical/i, 'should annotate the paraphrase');
+  assert.match(out.additionalContext, /not a block/i);
+});
+
+test('a genuinely different fix triggers neither block nor paraphrase note', () => {
+  const { cwd, file } = project();
+  handlePostToolUse(edit(cwd, file, 'const token = makeToken(user, options); if (!token) { return rejectAuth(user, "expired"); } return token;', 's1'));
+  handlePostToolUse(bash(cwd, 'npm test', '1 failed', 's1'));
+
+  const different = 'await refreshSession(req); const ok = await validate(req.session); return ok ? next() : res.redirect("/login");';
+  const res = handlePreToolUse(edit(cwd, file, different, 's2'));
+  assert.equal(res.json, undefined, 'no block, no note for a different shape');
+});
+
 test('hits are recorded for blocks and warn-mode near-misses', () => {
   const { cwd, file } = project();
   const root = resolveRoot(cwd);

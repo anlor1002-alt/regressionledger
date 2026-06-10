@@ -9,10 +9,12 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
-import { fingerprint } from './fingerprint.js';
+import { fingerprint, structureTokens } from './fingerprint.js';
+import { tokenSimilarity } from './similarity.js';
 import {
   resolveRoot,
   loadConfig,
+  loadLedger,
   addAttempt,
   resolvePending,
   findSimilarFailure,
@@ -107,6 +109,31 @@ function buildBlockMessage(hit, file, symbol) {
   );
 }
 
+// Structural threshold is deliberately stricter than the semantic one: a
+// "same shape, different words" note should only fire on a near-exact skeleton.
+const STRUCT_THRESHOLD = 0.95;
+
+/**
+ * Find a recorded FAILED attempt whose structural skeleton matches the
+ * proposed edit even though its semantic fingerprint did not.
+ */
+function findParaphrasedFailure(root, file, fp, config) {
+  const ledger = loadLedger(root);
+  const target = structureTokens(fp.tokens);
+  if (target.length < 8) return null; // too short to call a "shape"
+  let best = null;
+  for (const a of ledger.attempts) {
+    if (a.outcome !== 'fail') continue;
+    if (a.file !== file) continue;
+    const sim = tokenSimilarity(structureTokens(a.tokens || []), target);
+    if (sim >= STRUCT_THRESHOLD && (!best || sim > best.similarity)) {
+      best = { attempt: a, similarity: Math.round(sim * 100) / 100 };
+      if (sim === 1) break;
+    }
+  }
+  return best;
+}
+
 const allow = () => ({ exit: 0 });
 const deny = (reason) => ({
   exit: 0,
@@ -165,6 +192,32 @@ export function handlePreToolUse(input) {
         intentHash: fp.intentHash,
       });
       return config.mode === 'warn' ? preContext(`⚠ ${msg}`) : deny(msg);
+    }
+
+    // Second channel: structural shape. Only consulted when the semantic
+    // channel found NO match at all (a semantic hit below minFailures is the
+    // user's explicit choice to allow — don't second-guess it). When the SHAPE
+    // of this edit is near-identical to a recorded failure (classic sign of a
+    // renamed/paraphrased re-application), never block — annotate. False
+    // positives here cost nothing; silence would cost a cycle.
+    if (hit) continue;
+    const para = findParaphrasedFailure(root, rel, fp, config);
+    if (para) {
+      const pct = Math.round(para.similarity * 100);
+      debug('PARAPHRASE NOTE', rel, fp.symbol, para.similarity);
+      recordHit(root, {
+        mode: 'note',
+        file: rel,
+        symbol: fp.symbol,
+        similarity: para.similarity,
+        failCount: 1,
+        intentHash: fp.intentHash,
+      });
+      return preContext(
+        `RegressionLedger note (not a block): this edit is ${pct}% structurally identical to a fix that previously FAILED in ${rel}` +
+          (para.attempt.errorSignature ? ` (${para.attempt.errorSignature})` : '') +
+          `, though the identifiers differ — it may be the same fix, renamed. If the underlying approach is the same, change strategy instead. Run \`rl show ${rel}\` for the history.`
+      );
     }
   }
   return allow();
