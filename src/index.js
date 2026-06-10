@@ -13,8 +13,11 @@ export {
   addAttempt,
   resolvePending,
   findSimilarFailure,
+  recordHit,
+  loadHits,
   summarize,
   DEFAULT_CONFIG,
 } from './ledger.js';
 export { handlePreToolUse, handlePostToolUse, extractEdits } from './hooks.js';
 export { init, buildHookConfig, binPath } from './install.js';
+export { runDoctor } from './doctor.js';

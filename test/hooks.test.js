@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { handlePreToolUse, handlePostToolUse } from '../src/hooks.js';
-import { resolveRoot, saveConfig, summarize } from '../src/ledger.js';
+import { resolveRoot, saveConfig, summarize, loadHits } from '../src/ledger.js';
 
 delete process.env.RL_DIR; // ensure root derives from cwd, isolating each project
 
@@ -93,4 +93,43 @@ test('the first attempt is never blocked', () => {
   const { cwd, file } = project();
   const res = handlePreToolUse(edit(cwd, file, FIX, 's1'));
   assert.equal(res.json, undefined);
+});
+
+test('minFailures=2 requires two failures before blocking', () => {
+  const { cwd, file } = project();
+  saveConfig(resolveRoot(cwd), { minFailures: 2 });
+
+  // First failure — not enough to block yet.
+  handlePostToolUse(edit(cwd, file, FIX, 's1'));
+  handlePostToolUse(bash(cwd, 'npm test', '1 failed', 's1'));
+  let res = handlePreToolUse(edit(cwd, file, FIX, 's2'));
+  assert.equal(res.json, undefined, 'one failure must not block when minFailures=2');
+
+  // Second failure of the same fix — now it blocks.
+  handlePostToolUse(edit(cwd, file, FIX, 's2'));
+  handlePostToolUse(bash(cwd, 'npm test', '1 failed', 's2'));
+  res = handlePreToolUse(edit(cwd, file, FIX, 's3'));
+  assert.equal(res.json.hookSpecificOutput.permissionDecision, 'deny');
+  assert.match(res.json.hookSpecificOutput.permissionDecisionReason, /failed 2 times/i);
+});
+
+test('hits are recorded for blocks and warn-mode near-misses', () => {
+  const { cwd, file } = project();
+  const root = resolveRoot(cwd);
+
+  handlePostToolUse(edit(cwd, file, FIX, 's1'));
+  handlePostToolUse(bash(cwd, 'npm test', '1 failed', 's1'));
+
+  // block-mode hit
+  handlePreToolUse(edit(cwd, file, FIX, 's2'));
+  // warn-mode hit
+  saveConfig(root, { mode: 'warn' });
+  handlePreToolUse(edit(cwd, file, FIX, 's2'));
+
+  const hits = loadHits(root);
+  assert.equal(hits.length, 2);
+  assert.equal(hits[0].mode, 'block');
+  assert.equal(hits[1].mode, 'warn');
+  assert.equal(hits[0].file, 'src/auth.js');
+  assert.ok(hits[0].similarity >= 0.9);
 });

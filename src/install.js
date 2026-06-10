@@ -69,7 +69,9 @@ function ensureGitignore(cwd) {
     '',
     '# RegressionLedger — local attempt history (config.json is safe to commit)',
     '.regressionledger/ledger.json',
+    '.regressionledger/hits.json',
     '.regressionledger/*.tmp-*',
+    '.regressionledger/.lock',
     '',
   ].join('\n');
   let current = '';

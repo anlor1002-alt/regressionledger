@@ -11,6 +11,7 @@ import { tokenSimilarity } from './similarity.js';
 export const DEFAULT_CONFIG = {
   mode: 'block', // "block" => hard-deny a repeat failed fix; "warn" => advise only
   threshold: 0.9, // similarity at/above which two edits are "the same fix"
+  minFailures: 1, // a fix must have failed at least this many times before it blocks
   maxLedger: 5000, // cap stored attempts; oldest are dropped past this
   // Match a failed patch anywhere in the same file. The intent hash already
   // pins the exact normalized code, so this stays robust even when the file's
@@ -138,12 +139,14 @@ export function resolvePending(root, session, outcome, errorSignature = null) {
 
 /**
  * Find the closest prior FAILED attempt to a proposed change.
- * @returns {{attempt:object, similarity:number}|null} best match at/above the
- *          configured threshold, or null.
+ * @returns {{attempt:object, similarity:number, failCount:number}|null} best
+ *          match at/above the configured threshold (with how many distinct
+ *          failures matched), or null.
  */
 export function findSimilarFailure(root, target, config = loadConfig(root)) {
   const ledger = loadLedger(root);
   let best = null;
+  let failCount = 0;
   for (const a of ledger.attempts) {
     if (a.outcome !== 'fail') continue;
     if (a.file !== target.file) continue;
@@ -155,12 +158,42 @@ export function findSimilarFailure(root, target, config = loadConfig(root)) {
     } else {
       sim = tokenSimilarity(a.tokens || [], target.tokens || []);
     }
-    if (sim >= config.threshold && (!best || sim > best.similarity)) {
-      best = { attempt: a, similarity: sim };
-      if (sim === 1) break; // can't do better than an exact match
+    if (sim >= config.threshold) {
+      failCount++;
+      if (!best || sim > best.similarity) best = { attempt: a, similarity: sim };
     }
   }
-  return best;
+  return best ? { ...best, failCount } : null;
+}
+
+// ---- hit log: every block (or would-have-blocked warn) is recorded so users
+// can audit precision before/after trusting hard-block mode. ----
+
+const MAX_HITS = 500;
+
+export function recordHit(root, hit) {
+  const path = join(root, 'hits.json');
+  withLock(root, () => {
+    let hits = [];
+    try {
+      if (existsSync(path)) hits = JSON.parse(readFileSync(path, 'utf8'));
+    } catch {
+      hits = [];
+    }
+    hits.push({ ts: Date.now(), ...hit });
+    if (hits.length > MAX_HITS) hits = hits.slice(hits.length - MAX_HITS);
+    atomicWrite(path, JSON.stringify(hits, null, 2) + '\n');
+  });
+}
+
+export function loadHits(root) {
+  try {
+    const path = join(root, 'hits.json');
+    if (!existsSync(path)) return [];
+    return JSON.parse(readFileSync(path, 'utf8'));
+  } catch {
+    return [];
+  }
 }
 
 /** Summary counts for the `stats` command. */

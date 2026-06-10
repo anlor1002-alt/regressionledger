@@ -18,10 +18,12 @@ import {
   loadConfig,
   saveConfig,
   summarize,
+  loadHits,
   DEFAULT_CONFIG,
 } from './ledger.js';
 import { handlePreToolUse, handlePostToolUse } from './hooks.js';
 import { init, buildHookConfig } from './install.js';
+import { runDoctor } from './doctor.js';
 
 function version() {
   try {
@@ -36,10 +38,11 @@ const HELP = `${color.bold('RegressionLedger')} — stop your coding agent from 
 
 ${color.bold('Usage')}
   rl init [--warn] [--print]   Install the Claude Code hooks into ./.claude/settings.json
+  rl doctor                    Verify the install: env, wiring, and live hook round-trips
   rl show [file]               Show the attempt history (great for sharing/debugging)
   rl list [--json]             Flat list of every recorded attempt
-  rl stats                     Summary counts
-  rl config [key value]        View or change settings (mode, threshold, maxLedger, crossSymbol)
+  rl stats                     Summary counts, including blocked / would-have-blocked hits
+  rl config [key value]        View or change settings (mode, threshold, minFailures, crossSymbol, maxLedger)
   rl clear --force             Erase the ledger
   rl hook <event>              Internal: invoked by Claude Code (reads JSON on stdin)
 
@@ -128,12 +131,40 @@ function cmdList(args) {
 function cmdStats() {
   const root = resolveRoot();
   const s = summarize(root);
+  const hits = loadHits(root);
+  const blocked = hits.filter((h) => h.mode === 'block').length;
+  const warned = hits.filter((h) => h.mode === 'warn').length;
   console.log(`${color.bold('RegressionLedger stats')}`);
   console.log(`  attempts : ${s.total}`);
   console.log(`  ${color.green('passed')}   : ${s.pass}`);
   console.log(`  ${color.red('failed')}   : ${s.fail}`);
   console.log(`  ${color.yellow('pending')}  : ${s.pending}`);
   console.log(`  files    : ${s.files}`);
+  console.log(`  ${color.red('blocked repeat fixes')}        : ${blocked}`);
+  console.log(`  ${color.yellow('would-have-blocked (warn)')}  : ${warned}`);
+  if (warned > 0) {
+    console.log(color.dim(`  Review them with \`rl show\`, then enable hard-block: rl config mode block`));
+  }
+  return 0;
+}
+
+function cmdDoctor() {
+  console.log(`${color.bold('RegressionLedger doctor')}\n`);
+  const checks = runDoctor(process.cwd());
+  let failed = 0;
+  for (const c of checks) {
+    const mark =
+      c.status === 'pass' ? color.green('✓') : c.status === 'warn' ? color.yellow('!') : color.red('✗');
+    if (c.status === 'fail') failed++;
+    console.log(`  ${mark} ${c.name}`);
+    console.log(`      ${color.dim(c.detail)}`);
+  }
+  console.log('');
+  if (failed) {
+    console.log(color.red(`${failed} check(s) failed.`));
+    return 1;
+  }
+  console.log(color.green('All checks passed — the guardrail works end-to-end on this machine.'));
   return 0;
 }
 
@@ -155,7 +186,7 @@ function cmdConfig(args) {
   }
   let parsed = value;
   if (key === 'threshold') parsed = Number(value);
-  else if (key === 'maxLedger') parsed = parseInt(value, 10);
+  else if (key === 'maxLedger' || key === 'minFailures') parsed = parseInt(value, 10);
   else if (key === 'crossSymbol') parsed = value === 'true';
   else if (key === 'mode' && !['block', 'warn'].includes(value)) {
     console.error(color.red('mode must be "block" or "warn"'));
@@ -238,6 +269,8 @@ export async function main(argv) {
       return cmdList(args);
     case 'stats':
       return cmdStats();
+    case 'doctor':
+      return cmdDoctor();
     case 'config':
       return cmdConfig(args);
     case 'clear':

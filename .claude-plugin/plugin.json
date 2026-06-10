@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "regressionledger",
   "displayName": "RegressionLedger",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Stop your coding agent from re-applying fixes that already failed. Blocks repeat failed fixes across sessions, with the reason attached.",
   "author": {
     "name": "anlor1002-alt",
@@ -11,6 +11,12 @@
   "homepage": "https://github.com/anlor1002-alt/regressionledger",
   "repository": "https://github.com/anlor1002-alt/regressionledger",
   "license": "MIT",
-  "keywords": ["regression", "agent-memory", "guardrail", "claude-code-hook", "vibe-coding"],
+  "keywords": [
+    "regression",
+    "agent-memory",
+    "guardrail",
+    "claude-code-hook",
+    "vibe-coding"
+  ],
   "hooks": "./hooks/hooks.json"
 }

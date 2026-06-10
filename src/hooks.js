@@ -16,6 +16,7 @@ import {
   addAttempt,
   resolvePending,
   findSimilarFailure,
+  recordHit,
 } from './ledger.js';
 import { isVerificationCommand, detectOutcome } from './outcome.js';
 import { truncate, debug } from './util.js';
@@ -93,12 +94,13 @@ function buildBlockMessage(hit, file, symbol) {
   const pct = Math.round(hit.similarity * 100);
   const where = symbol === '(file scope)' ? file : `${symbol}() in ${file}`;
   const ago = relativeTime(hit.attempt.ts);
+  const times = hit.failCount > 1 ? ` It has failed ${hit.failCount} times.` : '';
   const why = hit.attempt.errorSignature
     ? ` It failed with: ${hit.attempt.errorSignature}`
     : ' It failed verification.';
   const same = pct >= 100 ? 'the same fix' : `a ${pct}%-identical fix`;
   return (
-    `RegressionLedger: you already tried ${same} to ${where} ${ago}.${why} ` +
+    `RegressionLedger: you already tried ${same} to ${where} ${ago}.${why}${times} ` +
     `Re-applying it will reproduce the same failure. Change strategy instead — ` +
     `address a different root cause or layer, or read why the earlier attempt failed. ` +
     `Run \`rl show ${file}\` to see the full attempt history.`
@@ -151,9 +153,17 @@ export function handlePreToolUse(input) {
       { file: rel, symbol: fp.symbol, intentHash: fp.intentHash, tokens: fp.tokens },
       config
     );
-    if (hit) {
+    if (hit && hit.failCount >= (config.minFailures || 1)) {
       const msg = buildBlockMessage(hit, rel, fp.symbol);
       debug(config.mode === 'block' ? 'BLOCK' : 'WARN', rel, fp.symbol, hit.similarity);
+      recordHit(root, {
+        mode: config.mode === 'warn' ? 'warn' : 'block',
+        file: rel,
+        symbol: fp.symbol,
+        similarity: Math.round(hit.similarity * 100) / 100,
+        failCount: hit.failCount,
+        intentHash: fp.intentHash,
+      });
       return config.mode === 'warn' ? preContext(`⚠ ${msg}`) : deny(msg);
     }
   }

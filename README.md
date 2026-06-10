@@ -140,8 +140,9 @@ It runs itself. The commands you'll actually use:
 
 | Command | What it does |
 | --- | --- |
+| `rl doctor` | Verify the install: env checks plus **live hook round-trips** (a first-time edit must pass, a seeded repeat failure must be denied). |
 | `rl show [file]` | The attempt history — failures, passes, error signatures, previews. The shareable artifact. |
-| `rl stats` | Summary counts (passed / failed / pending / files). |
+| `rl stats` | Summary counts, plus how many repeat fixes were blocked (or would have been, in warn mode). |
 | `rl list [--json]` | Flat list of every attempt. |
 | `rl config` | View settings. `rl config mode warn`, `rl config threshold 0.85`, … |
 | `rl clear --force` | Wipe the ledger. |
@@ -154,11 +155,15 @@ It runs itself. The commands you'll actually use:
 | --- | --- | --- |
 | `mode` | `block` | `block` = hard-deny a repeat failed fix. `warn` = allow but inject a warning. |
 | `threshold` | `0.9` | Similarity (0–1) at which two edits count as "the same fix". Higher = stricter. |
+| `minFailures` | `1` | A fix must have failed at least this many times before it blocks. Set `2` for an extra-cautious rollout. |
 | `crossSymbol` | `true` | Match a failed patch anywhere in the same file. Set `false` to also require the same enclosing symbol. |
 | `maxLedger` | `5000` | Cap on stored attempts; oldest are dropped past this. |
 
-Nervous about false positives on day one? Start with `rl init --warn`, watch what
-it would have blocked via the injected warnings, then switch to `block`.
+Nervous about false positives on day one? Start with `rl init --warn`. Every
+would-have-blocked event is logged, `rl stats` shows the count, and `rl show`
+lets you audit each one against your own code — then flip to `block` with
+evidence (`rl config mode block`). For an extra safety margin, require a fix to
+fail twice before it ever blocks: `rl config minFailures 2`.
 
 ## How it's different
 

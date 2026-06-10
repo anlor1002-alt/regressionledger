@@ -12,8 +12,8 @@ Thumbs.db
 .vscode/
 
 # RegressionLedger's own local history (config.json is safe to commit)
-.regressionledger/ledger.json
-.regressionledger/*.tmp-*
+.regressionledger/
+
 
 # Private launch material — drafts to post from your own accounts, not for the public repo
 LAUNCH_KIT.md
