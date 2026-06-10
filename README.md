@@ -5,10 +5,8 @@
 ![Node ≥ 18](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white)
 ![Dependencies: 0](https://img.shields.io/badge/dependencies-0-brightgreen)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-<!-- After `npm publish`, uncomment:
 [![npm](https://img.shields.io/npm/v/regressionledger.svg)](https://www.npmjs.com/package/regressionledger)
 [![downloads](https://img.shields.io/npm/dm/regressionledger.svg)](https://www.npmjs.com/package/regressionledger)
--->
 
 > **Stop your coding agent from resurrecting fixes that already failed.**
 
