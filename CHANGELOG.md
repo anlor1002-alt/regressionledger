@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-10
+
+The "Sixth Sense" release — capabilities no other agent tool ships.
+
+### Added
+- **Session briefing (SessionStart hook).** Every session start — including
+  right after context compaction wipes the agent's memory — injects a compact
+  "what already failed here" brief: dead ends per file with error signatures,
+  plus walls. Failures get blocked before they're re-conceived, not just
+  re-applied. Silent when the ledger is empty.
+- **Thrash escalation.** When 3+ *distinct* failed approaches share one error
+  signature, the post-test hook escalates: stop editing, state root-cause
+  hypotheses, verify one, then fix. Catches the doom loop that identical-fix
+  blocking can't.
+- **Herd immunity: `rl export` / `rl import`.** Share settled verdicts between
+  machines and teammates. Imported failures block locally and stay attributed
+  via `importedFrom`. Pendings and duplicates never travel.
+
 ## [0.7.0] - 2026-06-10
 
 ### Added
@@ -119,7 +137,8 @@ First public release.
 - **Zero runtime dependencies**; hooks fail open on any error.
 - 35 tests (`node:test`) and a no-Claude doom-loop demo (`npm run demo`).
 
-[Unreleased]: https://github.com/anlor1002-alt/regressionledger/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/anlor1002-alt/regressionledger/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.4.0...v0.5.0

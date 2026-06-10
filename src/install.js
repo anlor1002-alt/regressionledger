@@ -21,6 +21,7 @@ function commands() {
   return {
     pre: `node "${bin}" hook pretooluse`,
     post: `node "${bin}" hook posttooluse`,
+    session: `node "${bin}" hook sessionstart`,
   };
 }
 
@@ -51,7 +52,7 @@ function stripOurEntries(eventArr) {
 }
 
 export function buildHookConfig() {
-  const { pre, post } = commands();
+  const { pre, post, session } = commands();
   return {
     PreToolUse: [
       { matcher: 'Edit|Write|MultiEdit', hooks: [{ type: 'command', command: pre }] },
@@ -60,6 +61,7 @@ export function buildHookConfig() {
       { matcher: 'Edit|Write|MultiEdit', hooks: [{ type: 'command', command: post }] },
       { matcher: 'Bash', hooks: [{ type: 'command', command: post }] },
     ],
+    SessionStart: [{ matcher: '', hooks: [{ type: 'command', command: session }] }],
   };
 }
 

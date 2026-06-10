@@ -11,6 +11,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { fingerprint, structureTokens } from './fingerprint.js';
 import { tokenSimilarity } from './similarity.js';
+import { buildBriefing, detectThrashWall } from './briefing.js';
 import {
   resolveRoot,
   loadConfig,
@@ -223,6 +224,25 @@ export function handlePreToolUse(input) {
   return allow();
 }
 
+/**
+ * SessionStart: the agent wakes up (new session, /clear, resume, or right
+ * after compaction wiped its memory) — inject the failure briefing so dead
+ * ends are known before they're re-conceived.
+ */
+export function handleSessionStart(input) {
+  const cwd = input.cwd || process.cwd();
+  const root = resolveRoot(cwd);
+  const briefing = buildBriefing(root);
+  if (!briefing) return allow();
+  debug('session briefing injected', input.source || '');
+  return {
+    exit: 0,
+    json: {
+      hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: briefing },
+    },
+  };
+}
+
 function extractResultText(input) {
   const r = input.tool_response ?? input.tool_result ?? input.result;
   if (r == null) return '';
@@ -279,10 +299,21 @@ export function handlePostToolUse(input) {
     const count = resolvePending(root, session, outcome, errorSignature);
     debug('resolved', count, 'attempts as', outcome);
     if (outcome === 'fail' && count > 0) {
-      return postContext(
+      let msg =
         `RegressionLedger logged ${count} edit(s) from this run as FAILED. ` +
-          `Don't re-apply those same patches — try a different approach.`
-      );
+        `Don't re-apply those same patches — try a different approach.`;
+      // Thrash escalation: many DIFFERENT approaches dying on one wall is the
+      // doom loop blocking alone can't catch. Force a strategy checkpoint.
+      const wall = detectThrashWall(root);
+      if (wall && errorSignature && wall.signature === errorSignature) {
+        msg =
+          `RegressionLedger ESCALATION: ${wall.distinct} distinct approaches have now failed with the same error — ` +
+          `"${wall.signature}" (${wall.files.join(', ')}). The patches differ; the error doesn't. That means the ` +
+          `DIAGNOSIS is wrong, not the patches. STOP editing. Before the next change: (1) re-read the failing test and ` +
+          `the error closely, (2) state 2-3 hypotheses for the root cause, (3) verify one with a read or a log — then fix. ` +
+          `Run \`rl show --by-error\` to see the wall.`;
+      }
+      return postContext(msg);
     }
     return allow();
   }

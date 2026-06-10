@@ -200,6 +200,33 @@ export function unblockAttempts(root, file, hashPrefix = '') {
   });
 }
 
+/**
+ * Herd immunity: merge attempts exported from another machine/teammate into
+ * this ledger. Entries are deduped by id; imported ones are stamped with
+ * `importedFrom` so `rl show` can tell whose scar tissue it is. Pending
+ * entries are skipped (only settled verdicts travel).
+ * @returns {{added:number, skipped:number}}
+ */
+export function importAttempts(root, attempts, from = 'import') {
+  return withLock(root, () => {
+    const ledger = loadLedger(root);
+    const have = new Set(ledger.attempts.map((a) => a.id));
+    let added = 0;
+    let skipped = 0;
+    for (const a of attempts || []) {
+      if (!a || !a.id || !a.file || !a.intentHash || have.has(a.id) || a.outcome === 'pending') {
+        skipped++;
+        continue;
+      }
+      ledger.attempts.push({ ...a, importedFrom: a.importedFrom || from });
+      have.add(a.id);
+      added++;
+    }
+    if (added) saveLedger(root, ledger);
+    return { added, skipped };
+  });
+}
+
 // ---- hit log: every block (or would-have-blocked warn) is recorded so users
 // can audit precision before/after trusting hard-block mode. ----
 

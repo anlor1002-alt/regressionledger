@@ -174,6 +174,7 @@ It runs itself. The commands you'll actually use:
 | `rl list [--json]` | Flat list of every attempt. |
 | `rl config` | View settings. `rl config mode warn`, `rl config threshold 0.85`, … |
 | `rl unblock <file>` | Retire recorded failures for a file when the context genuinely changed — they stop blocking but stay auditable (∅ retired, with a receipt). |
+| `rl export` / `rl import <file>` | Share settled verdicts between machines/teammates — imported failures block here too (herd immunity). |
 | `rl clear --force` | Wipe the ledger. |
 
 ## Configuration
@@ -206,6 +207,23 @@ fail twice before it ever blocks: `rl config minFailures 2`.
 The differentiators: a **semantic** fix fingerprint (not raw-text or tool+arg
 hashing), an **outcome** link (which fix failed, and why), **cross-session +
 post-compaction** persistence, and a **hard block** that the model can't ignore.
+
+### Things no other tool does (as far as we can tell)
+
+- **🧠 Session briefing.** A `SessionStart` hook injects a compact "what already
+  failed here" brief every time a session starts — including **right after
+  context compaction wipes the agent's memory**. Dead ends are blocked before
+  they're re-*conceived*, not just before they're re-applied.
+- **🌀 Thrash escalation.** Blocking identical fixes catches one doom loop; the
+  other is *different* fixes all dying on the same error. When 3+ distinct
+  approaches hit one wall, the hook escalates: *"the diagnosis is wrong, not
+  the patches — stop, state root-cause hypotheses, verify one, then edit."*
+- **🧬 Dual-channel fingerprinting.** Renaming every variable used to dodge
+  matchers. A structure-only second fingerprint annotates "this may be the same
+  fix, renamed" — without ever blocking on the weaker signal.
+- **🤝 Herd immunity.** `rl export` / `rl import` share settled verdicts between
+  machines and teammates: *your agent inherits the dead ends my agent already
+  paid for.* Failures stay attributed (`importedFrom`) and auditable.
 
 ## FAQ
 

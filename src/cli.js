@@ -20,9 +20,10 @@ import {
   summarize,
   loadHits,
   unblockAttempts,
+  importAttempts,
   DEFAULT_CONFIG,
 } from './ledger.js';
-import { handlePreToolUse, handlePostToolUse } from './hooks.js';
+import { handlePreToolUse, handlePostToolUse, handleSessionStart } from './hooks.js';
 import { init, buildHookConfig } from './install.js';
 import { runDoctor } from './doctor.js';
 import { buildReportData, renderMarkdown, renderHtml, groupByError } from './report.js';
@@ -50,6 +51,8 @@ ${color.bold('Usage')}
   rl stats [--card]            Summary counts; --card prints a shareable screenshot card
   rl config [key value]        View or change settings (mode, threshold, minFailures, crossSymbol, maxLedger)
   rl unblock <file> [hash]     Retire recorded failures for a file (the context truly changed)
+  rl export [file]             Export settled attempts to share (herd immunity)
+  rl import <file>             Merge a teammate's export — their dead ends block here too
   rl clear --force             Erase the ledger
   rl hook <event>              Internal: invoked by Claude Code (reads JSON on stdin)
 
@@ -372,6 +375,38 @@ function cmdUnblock(args) {
   return 0;
 }
 
+function cmdExport(args) {
+  const root = resolveRoot();
+  const out = args.find((a) => !a.startsWith('-')) || 'regressionledger-export.json';
+  const attempts = loadLedger(root).attempts.filter((a) => a.outcome !== 'pending');
+  writeFileSync(
+    out,
+    JSON.stringify({ version: 1, tool: 'regressionledger', attempts }, null, 2) + '\n'
+  );
+  console.log(`${color.green('✓')} Exported ${attempts.length} settled attempt(s) to ${color.bold(out)}`);
+  console.log(color.dim('Share it with a teammate: rl import ' + out + ' — their agent inherits your dead ends.'));
+  return 0;
+}
+
+function cmdImport(args) {
+  const file = args.find((a) => !a.startsWith('-'));
+  if (!file) {
+    console.error(color.red('Usage: rl import <export-file.json>'));
+    return 1;
+  }
+  let data;
+  try {
+    data = JSON.parse(readFileSync(file, 'utf8').replace(/^﻿/, ''));
+  } catch (err) {
+    console.error(color.red(`Cannot read ${file}: ${err.message}`));
+    return 1;
+  }
+  const { added, skipped } = importAttempts(resolveRoot(), data.attempts, file);
+  console.log(`${color.green('✓')} Imported ${added} attempt(s) (${skipped} duplicate/invalid skipped).`);
+  if (added) console.log(color.dim('Failures from this import now block here too — herd immunity.'));
+  return 0;
+}
+
 function cmdClear(args) {
   if (!args.includes('--force')) {
     console.error(color.yellow('Refusing to clear without --force. Run: rl clear --force'));
@@ -411,7 +446,9 @@ async function cmdHook(args) {
         ? handlePreToolUse(input)
         : event === 'posttooluse'
           ? handlePostToolUse(input)
-          : { exit: 0 };
+          : event === 'sessionstart'
+            ? handleSessionStart(input)
+            : { exit: 0 };
     if (result.json) process.stdout.write(JSON.stringify(result.json));
     return result.exit ?? 0;
   } catch (err) {
@@ -451,6 +488,10 @@ export async function main(argv) {
       return cmdReport(args);
     case 'unblock':
       return cmdUnblock(args);
+    case 'export':
+      return cmdExport(args);
+    case 'import':
+      return cmdImport(args);
     case 'config':
       return cmdConfig(args);
     case 'clear':
