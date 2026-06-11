@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "regressionledger",
   "displayName": "RegressionLedger",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Stop your coding agent from re-applying fixes that already failed. Blocks repeat failed fixes across sessions, with the reason attached.",
   "author": {
     "name": "anlor1002-alt",

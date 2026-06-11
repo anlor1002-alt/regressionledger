@@ -6,6 +6,31 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-06-11
+
+Security-review release. An independent security pass (separate from the
+correctness gate) flagged five issues; HIGH-1 was already mitigated in 0.10.0
+(import neutralization + labeling). The rest are fixed here.
+
+### Security / Fixed
+- **HIGH-2 — `rl init` can no longer clobber `settings.json`.** A file that
+  existed but failed to parse was previously swallowed (returned `{}`) and then
+  overwritten, destroying the user's hooks/permissions/env — contradicting the
+  README's "merging, not clobbering". `init` now parses first; an unparseable
+  file is backed up to `settings.json.broken-<ts>.bak` and init aborts with a
+  clear message instead of writing.
+- **MED-3 — ReDoS in the enclosing-symbol regex.** The Java/C# method pattern
+  had a nested whitespace quantifier that backtracked super-linearly on long
+  whitespace runs (and ran on every edit). Rewritten with bounded, non-nested
+  quantifiers; a 5000-space input now resolves in <1ms.
+- **MED-4 — CI supply chain pinned.** The demo workflow (which has
+  `contents: write`) installed `ttyd` `latest` and `vhs@latest`; both are now
+  pinned to explicit versions.
+- **LOW-5 — `recordHit` is now throw-proof.** It runs just before a deny is
+  returned; a throw there would bubble to the CLI's fail-open catch and
+  silently drop the block. Its I/O is now fully swallowed — telemetry must
+  never cost a block.
+
 ## [0.10.0] - 2026-06-11
 
 The gate-review release. The same community reviewer came back harder — every
@@ -233,7 +258,8 @@ First public release.
 - **Zero runtime dependencies**; hooks fail open on any error.
 - 35 tests (`node:test`) and a no-Claude doom-loop demo (`npm run demo`).
 
-[Unreleased]: https://github.com/anlor1002-alt/regressionledger/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/anlor1002-alt/regressionledger/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/anlor1002-alt/regressionledger/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/anlor1002-alt/regressionledger/compare/v0.8.0...v0.8.1

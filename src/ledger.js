@@ -342,18 +342,28 @@ export function importAttempts(root, attempts, from = 'import') {
 const MAX_HITS = 500;
 
 export function recordHit(root, hit) {
-  const path = join(root, 'hits.json');
-  withLock(root, () => {
-    let hits = [];
-    try {
-      if (existsSync(path)) hits = JSON.parse(readFileSync(path, 'utf8'));
-    } catch {
-      hits = [];
-    }
-    hits.push({ ts: Date.now(), ...hit });
-    if (hits.length > MAX_HITS) hits = hits.slice(hits.length - MAX_HITS);
-    atomicWrite(path, JSON.stringify(hits, null, 2) + '\n');
-  });
+  // Telemetry only — it must NEVER throw: it runs just before a deny is
+  // returned, and a throw here would bubble to the CLI's fail-open catch,
+  // silently dropping the block it was about to record. (LOW-5, security
+  // review.) Any I/O failure is swallowed; a missing hit log is acceptable,
+  // a missing block is not.
+  try {
+    const path = join(root, 'hits.json');
+    withLock(root, () => {
+      let hits = [];
+      try {
+        if (existsSync(path)) hits = JSON.parse(readFileSync(path, 'utf8'));
+      } catch {
+        hits = [];
+      }
+      if (!Array.isArray(hits)) hits = [];
+      hits.push({ ts: Date.now(), ...hit });
+      if (hits.length > MAX_HITS) hits = hits.slice(hits.length - MAX_HITS);
+      atomicWrite(path, JSON.stringify(hits, null, 2) + '\n');
+    });
+  } catch (err) {
+    debug('recordHit failed (non-fatal):', err && err.message);
+  }
 }
 
 export function loadHits(root) {

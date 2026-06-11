@@ -29,12 +29,17 @@ jobs:
         with:
           go-version: stable
       - name: Install ffmpeg, ttyd, and VHS
+        # Pinned versions — never `latest`/`@main` for code that runs in CI with
+        # contents:write. Bump deliberately. (Supply-chain note from a security review.)
+        env:
+          TTYD_VERSION: "1.7.7"
+          VHS_VERSION: "v0.10.0"
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q ffmpeg
-          curl -fsSL https://github.com/tsl0922/ttyd/releases/latest/download/ttyd.x86_64 -o /tmp/ttyd
+          curl -fsSL "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.x86_64" -o /tmp/ttyd
           sudo install /tmp/ttyd /usr/local/bin/ttyd
-          go install github.com/charmbracelet/vhs@latest
+          go install "github.com/charmbracelet/vhs@${VHS_VERSION}"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Render the tape
         run: vhs demo/regressionledger.tape

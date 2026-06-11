@@ -198,7 +198,11 @@ const DECL_PATTERNS = [
   /^\s*def\s+([A-Za-z_$][\w$]*)/, // python / ruby
   /^\s*func\s+(?:\([^)]*\)\s*)?([A-Za-z_$][\w$]*)/, // go
   /^\s*(?:pub\s+)?(?:async\s+)?fn\s+([A-Za-z_$][\w$]*)/, // rust
-  /^\s*(?:public|private|protected|static|final|synchronized|\s)+[\w<>\[\],.\s]+?\s+([A-Za-z_$][\w$]*)\s*\([^;{]*\)\s*\{/, // java/c# method
+  // java/c# method. Modifiers are matched once (no nested whitespace
+  // quantifier), and the return-type run excludes whitespace to avoid the
+  // catastrophic backtracking the old `(?:…|\s)+[\w<>\[\],.\s]+?` form caused
+  // on long whitespace runs (ReDoS — found in a security review).
+  /^\s*(?:(?:public|private|protected|static|final|synchronized)\s+){1,5}[\w<>\[\],.]+\s+([A-Za-z_$][\w$]*)\s*\([^;{]*\)\s*\{/, // java/c# method
   /^\s*(?:export\s+)?(?:async\s+)?([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{/, // bare method() {
   /^\s*([A-Za-z_$][\w$]*)\s*[:=]\s*(?:async\s*)?(?:function\b|\([^)]*\)\s*=>)/, // obj prop / fn assignment
 ];

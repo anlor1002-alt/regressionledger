@@ -2,7 +2,7 @@
 // local ledger, and keep the raw history out of git. Idempotent — re-running
 // refreshes the RegressionLedger entries without disturbing other hooks.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, copyFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { atomicWrite } from './util.js';
@@ -25,12 +25,24 @@ function commands() {
   };
 }
 
+// Sentinel thrown when settings.json exists but cannot be parsed. Swallowing
+// the error and returning {} would clobber the user's real settings (hooks,
+// permissions, env) on the next write — the README promises "merging, not
+// clobbering", so an unparseable file must STOP init, not overwrite it.
+export class SettingsParseError extends Error {}
+
 function readSettings(settingsPath) {
   if (!existsSync(settingsPath)) return {};
+  const raw = readFileSync(settingsPath, 'utf8');
+  if (!raw.trim()) return {};
   try {
-    return JSON.parse(readFileSync(settingsPath, 'utf8'));
-  } catch {
-    return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new SettingsParseError('settings.json is not a JSON object');
+    }
+    return parsed;
+  } catch (err) {
+    throw new SettingsParseError(err.message);
   }
 }
 
@@ -91,16 +103,36 @@ function ensureGitignore(cwd) {
 export function init(cwd = process.cwd(), opts = {}) {
   const root = resolveRoot(cwd);
   const { configPath, ledgerPath } = getPaths(root);
+  const settingsPath = join(cwd, '.claude', 'settings.json');
 
-  // Seed config + ledger if absent; honor a requested mode.
+  // Parse the existing settings BEFORE writing anything. If it exists but is
+  // unparseable, back it up and refuse — never clobber a file we couldn't read.
+  let settings;
+  try {
+    settings = readSettings(settingsPath);
+  } catch (err) {
+    if (err instanceof SettingsParseError) {
+      const backup = `${settingsPath}.broken-${Date.now()}.bak`;
+      try {
+        copyFileSync(settingsPath, backup);
+      } catch {}
+      const e = new Error(
+        `Refusing to overwrite ${settingsPath}: it isn't valid JSON (${err.message}). ` +
+          `A copy was saved to ${backup}. Fix the JSON and re-run \`rl init\`, ` +
+          `or use \`rl init --print\` to add the hooks block by hand.`
+      );
+      e.code = 'RL_SETTINGS_UNPARSEABLE';
+      throw e;
+    }
+    throw err;
+  }
+
+  // Only after we know settings is safe: seed config + ledger.
   const config = loadConfig(root);
   if (opts.mode) config.mode = opts.mode;
   saveConfig(root, config);
   if (!existsSync(ledgerPath)) saveLedger(root, loadLedger(root));
 
-  // Merge hooks into .claude/settings.json.
-  const settingsPath = join(cwd, '.claude', 'settings.json');
-  const settings = readSettings(settingsPath);
   settings.hooks = settings.hooks || {};
   const ours = buildHookConfig();
   for (const event of Object.keys(ours)) {

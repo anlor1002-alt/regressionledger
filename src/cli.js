@@ -430,7 +430,16 @@ function cmdInit(args) {
     return 0;
   }
   const mode = args.includes('--warn') ? 'warn' : undefined;
-  const res = init(process.cwd(), { mode });
+  let res;
+  try {
+    res = init(process.cwd(), { mode });
+  } catch (err) {
+    if (err && err.code === 'RL_SETTINGS_UNPARSEABLE') {
+      console.error(color.red('✗ ' + err.message));
+      return 1;
+    }
+    throw err;
+  }
   console.log(`${color.green('✓')} RegressionLedger installed.`);
   console.log(`  hooks   → ${res.settingsPath}`);
   console.log(`  ledger  → ${res.root}`);
