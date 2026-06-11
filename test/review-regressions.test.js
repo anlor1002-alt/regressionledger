@@ -46,22 +46,27 @@ test('REVIEW-2: import respects maxLedger and truncates hostile fields', () => {
   assert.ok(attempts[0].errorSignature.length <= 200, 'signature truncated');
 });
 
-test('REVIEW-3: malformed tokens from an import cannot disable the guardrail', () => {
+test('REVIEW-3: malformed tokens from an import cannot disable the guardrail', async () => {
   const r = root();
   // bypass import validation by writing directly (simulates a hand-edited ledger)
   addAttempt(r, { session: 'x', file: 'src/a.js', symbol: 'f', intentHash: 'hOK', tokens: 'evil-string', preview: 'p', tool: 'Edit' });
   resolvePending(r, 'x', 'fail', 'boom');
-  seedFail(r, 9, 'src/a.js', 'boom'); // a GOOD failed record for the same file
+  // a GOOD failed record for the same file, with real fingerprint hashes
+  const { fingerprint } = await import('../src/fingerprint.js');
+  const GOOD_FIX = 'return verifyToken(req.headers.authorization);';
+  const fp = fingerprint({ filePath: 'src/a.js', changedCode: GOOD_FIX });
+  addAttempt(r, { session: 'g', file: 'src/a.js', symbol: fp.symbol, intentHash: fp.intentHash, rawHash: fp.rawHash, tokens: fp.tokens, preview: GOOD_FIX, tool: 'Edit' });
+  resolvePending(r, 'g', 'fail', 'boom');
 
   const cwd = join(r, '..');
   process.env.RL_DIR = r;
   try {
-    // Re-applying the GOOD record's fix must still be denied despite the bad sibling entry.
+    // Re-applying the GOOD record's fix verbatim must still be denied despite the bad sibling entry.
     const res = handlePreToolUse({
       tool_name: 'Edit',
       cwd,
       session_id: 's2',
-      tool_input: { file_path: join(cwd, 'src/a.js'), old_string: 'q', new_string: 't9 x' },
+      tool_input: { file_path: join(cwd, 'src/a.js'), old_string: 'q', new_string: GOOD_FIX },
     });
     assert.ok(res.json, 'hook must still respond');
     assert.equal(res.json.hookSpecificOutput.permissionDecision, 'deny');

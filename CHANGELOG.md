@@ -6,6 +6,35 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-06-10
+
+The "right to retry" release. A community member cloned the repo, stress-tested
+the fingerprint design, and found the flaw our own benchmark was structurally
+blind to: collapsing literals meant `timeout: 5000` → `timeout: 30000` shared a
+fingerprint — so the tool **hard-blocked legitimate parameter changes** with
+"change strategy", actively steering agents away from correct fixes. Worse, the
+benchmark's disguise list *defined* literal changes as matches, making its
+"0 false blocks" circular. They proposed the fix we shipped. Thank you.
+
+### Changed
+- **Hard blocks now require a raw-channel match** (literals intact; only
+  whitespace/comments stripped) — i.e., the retry is *the same code, constants
+  included*. Changing a constant/string is never denied.
+- **Collapsed-only matches** (same shape, different literals) get an advisory
+  note and one hearing: "if changing that value IS your hypothesis, proceed —
+  this variant gets its own verdict." A variant that fails earns its own
+  record; *its* verbatim repeat then hard-blocks.
+- **Retire-on-pass is raw-keyed**: the variant that passed does not acquit the
+  variant that failed.
+- **Batch attribution is disclosed**: when one test run fails N edits at once,
+  each record carries `batchSize` and block messages admit the attribution is
+  approximate, with an `rl unblock` pointer.
+- **Benchmark rewritten in three honest categories**: cosmetic re-applies
+  hard-matched 60/60; literal variants routed to note-not-block 40/40 with
+  0 wrongly blocked; distinct fixes 0/190 on either channel.
+- Legacy ledger entries (no `rawHash`) soft-degrade to advisory notes; newly
+  recorded failures regain hard blocks.
+
 ## [0.8.1] - 2026-06-10
 
 Hardening release: every fix below came from an independent adversarial review
@@ -168,7 +197,8 @@ First public release.
 - **Zero runtime dependencies**; hooks fail open on any error.
 - 35 tests (`node:test`) and a no-Claude doom-loop demo (`npm run demo`).
 
-[Unreleased]: https://github.com/anlor1002-alt/regressionledger/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/anlor1002-alt/regressionledger/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/anlor1002-alt/regressionledger/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.6.0...v0.7.0

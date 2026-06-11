@@ -83,12 +83,14 @@ a suggestion.
         PostToolUse (Bash: npm test / pytest / …) ── resolve pending → pass | fail
 ```
 
-- **Fingerprint** — the changed code is lexed into a normalized token stream:
-  whitespace and comments are stripped; string and number literals collapse to
-  `STR`/`NUM`; identifiers, keywords, and operators are kept. Two edits with the
-  same structure but different messages/limits collide; `return true` and
-  `return false` do **not**. A SHA-256 of the stream gives O(1) exact matching;
-  k-gram Jaccard similarity catches near-duplicates.
+- **Fingerprint (two channels)** — the changed code is lexed into normalized
+  token streams. The **raw channel** keeps literals intact (only whitespace and
+  comments are stripped): matching here proves the retry is *the same code,
+  constants included*, and it is the **only channel allowed to hard-block**.
+  The **collapsed channel** abstracts string/number literals to `STR`/`NUM`
+  (`return true` ≠ `return false`, deliberately): a collapsed-only match means
+  "same shape, different constants" — often a *legitimate* next experiment
+  (timeout `5000`→`30000`), so it produces an advisory note, never a denial.
 - **Outcome linkage** — after the agent runs `npm test` / `pytest` / `tsc` /
   `cargo test` / …, the hook parses the output and marks the edits since the last
   run as `pass` or `fail`, capturing the first error line as a signature. When a
@@ -104,13 +106,19 @@ Check it yourself in seconds — the benchmark is deterministic:
 
 ```bash
 npm run bench
-# Disguised repeat fixes caught : 120/120  (100.0%)
-# False blocks on distinct fixes: 0/190    (0.0%)
+# 1. Cosmetic re-applies HARD-matched (raw)   : 60/60   (100.0%)
+# 2. Literal variants routed to note-not-block : 40/40   (100.0%)
+#    ...wrongly hard-blocked (false positives) : 0/40
+# 3. Distinct fixes matching either channel    : 0/190   (0.0%)
 ```
 
-120 cosmetically-disguised re-applications (reflowed whitespace, injected
-comments, changed string/number literals) are all caught; 190 pairs of
-genuinely different fixes produce zero false blocks at the default threshold.
+Three honest categories: cosmetic re-applies (whitespace/comments — the same
+fix) are hard-matched; **changed constants (timeout `5000`→`30000`) are never
+blocked** — they're routed to an advisory note and get their own verdict; and
+genuinely different fixes match nothing. An earlier version of this benchmark
+counted literal changes as "disguises to catch", which made its zero-false-block
+number circular — a community stress-test caught that, and the matching design
+changed because of it.
 
 ## Install
 
@@ -228,8 +236,23 @@ post-compaction** persistence, and a **hard block** that the model can't ignore.
 ## FAQ
 
 **Will it block a legitimately different edit to the same function?**
-No — matching is keyed on the *normalized changed code*, not the function. A
+No — matching is keyed on the *changed code itself*, not the function. A
 different approach to the same bug has a different fingerprint and sails through.
+
+**What if the right fix is just a different constant — timeout `5000`→`30000`?**
+Never blocked. Hard blocks require a **raw-channel** match (same code,
+constants included). A changed constant only matches the collapsed channel, so
+it gets an advisory note ("same shape, different values — if changing the value
+IS your hypothesis, proceed") and its own verdict. Only re-applying a failed
+variant *verbatim* is denied. The benchmark enforces this: 0/40 parameter
+changes blocked.
+
+**One test run settles several edits at once — isn't attribution noisy?**
+Yes, and the tool says so: when N edits are failed by a single run, each record
+carries `batchSize`, and any resulting block message discloses *"it failed
+alongside N−1 other edits — attribution is approximate"* with an `rl unblock`
+pointer. Flaky tests can still blame an innocent fix; `minFailures 2` is the
+mitigation if that bites you.
 
 **What if the failed fix is actually correct and something else was broken?**
 Once any run marks that exact fix as **passing**, the stale `fail` record is

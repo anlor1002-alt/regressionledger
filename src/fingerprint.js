@@ -77,8 +77,11 @@ export function structureTokens(tokens) {
 /**
  * Lex `code` into a normalized token array. String and number literals collapse
  * to the sentinels STR/NUM; identifiers and operators are kept verbatim.
+ * With `keepLiterals`, the actual literal lexemes are kept instead — this is
+ * the RAW channel: two snippets share it only when they are the same code
+ * modulo whitespace and comments, constants included.
  */
-export function tokenize(code, ext = '') {
+export function tokenize(code, ext = '', keepLiterals = false) {
   const cfg = commentConfig(ext);
   const tokens = [];
   const n = code.length;
@@ -121,14 +124,16 @@ export function tokenize(code, ext = '') {
     // triple-quoted strings (python-style)
     if (cfg.triple && (startsWith('"""') || startsWith("'''"))) {
       const q = code.slice(i, i + 3);
+      const start = i;
       const end = code.indexOf(q, i + 3);
       i = end === -1 ? n : end + 3;
-      tokens.push(STR);
+      tokens.push(keepLiterals ? code.slice(start, i) : STR);
       continue;
     }
 
     // strings: ' " `  (with escape handling)
     if (c === '"' || c === "'" || c === '`') {
+      const start = i;
       i++;
       while (i < n) {
         if (code[i] === '\\') {
@@ -141,7 +146,7 @@ export function tokenize(code, ext = '') {
         }
         i++;
       }
-      tokens.push(STR);
+      tokens.push(keepLiterals ? code.slice(start, i) : STR);
       continue;
     }
 
@@ -149,7 +154,7 @@ export function tokenize(code, ext = '') {
     reNumber.lastIndex = i;
     const numMatch = reNumber.exec(code);
     if (numMatch && numMatch.index === i) {
-      tokens.push(NUM);
+      tokens.push(keepLiterals ? numMatch[0] : NUM);
       i = reNumber.lastIndex;
       continue;
     }
@@ -243,16 +248,22 @@ export function extractSymbol(fileContent, anchor) {
 
 /**
  * Compute the full fingerprint of a change.
+ *  - intentHash/tokens: the COLLAPSED channel (literals abstracted) — used for
+ *    similarity and the ambiguous "same shape, different constants" signal.
+ *  - rawHash: the RAW channel (literals intact, whitespace/comments stripped) —
+ *    the only channel allowed to HARD-BLOCK, because matching here proves the
+ *    retry is byte-equivalent code, not a legitimate parameter change.
  * @param {{filePath:string, changedCode:string, fileContent?:string, anchor?:string}} args
- * @returns {{symbol:string, intentHash:string, tokens:string[]}}
+ * @returns {{symbol:string, intentHash:string, rawHash:string, tokens:string[]}}
  */
 export function fingerprint({ filePath, changedCode, fileContent, anchor }) {
   const ext = extname(filePath || '').replace('.', '').toLowerCase();
   const tokens = tokenize(changedCode || '', ext);
   const intentHash = sha256(tokens.join(' '));
+  const rawHash = sha256(tokenize(changedCode || '', ext, true).join(' '));
   const symbol = extractSymbol(
     fileContent != null ? fileContent : changedCode || '',
     anchor != null ? anchor : changedCode || ''
   );
-  return { symbol, intentHash, tokens };
+  return { symbol, intentHash, rawHash, tokens };
 }

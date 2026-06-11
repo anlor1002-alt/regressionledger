@@ -1,9 +1,16 @@
-// Reproducible fingerprint benchmark: how well does the matcher catch
-// cosmetically-disguised repeat fixes, and does it ever false-block a
-// genuinely different fix?  Run with:  npm run bench
+// Reproducible fingerprint benchmark — three honest categories:
 //
-// Deterministic by construction (no randomness), so the numbers in the README
-// are checkable by anyone in seconds.
+//  1. COSMETIC disguises (whitespace/comments)  -> must match the RAW channel
+//     (hard-block territory: same code, constants included)
+//  2. LITERAL variants (changed string/number constants) -> must match the
+//     COLLAPSED channel but NOT the raw channel (note-and-allow territory —
+//     timeout 5000→30000 is often the legitimate next experiment, so blocking
+//     here would be a false positive; the old benchmark counted these as
+//     "disguises to catch", which made its 0-false-block number circular.
+//     Fixed after community stress-testing.)
+//  3. DISTINCT fixes -> must match NEITHER channel
+//
+// Deterministic by construction.  Run with:  npm run bench
 
 import { fingerprint } from '../src/fingerprint.js';
 import { tokenSimilarity } from '../src/similarity.js';
@@ -11,7 +18,6 @@ import { DEFAULT_CONFIG } from '../src/ledger.js';
 
 const THRESHOLD = DEFAULT_CONFIG.threshold;
 
-// 20 base "fixes" — realistic, structurally distinct edits across common bug-fix shapes.
 const BASES = [
   'return res.status(401).json({ message: "unauthorized", code: 401 });',
   'if (!user || !user.token) { throw new AuthError("missing token", 401); }',
@@ -19,7 +25,7 @@ const BASES = [
   'items = items.filter(item => item != null && item.id !== undefined);',
   'cache.set(key, value, { ttl: 60000 }); return cache.get(key);',
   'for (let i = 0; i < rows.length - 1; i++) { merge(rows[i], rows[i + 1]); }',
-  'const safe = input.replace(/[<>"&]/g, ch => entities[ch] || ch);',
+  'const safe = String(input).split("<").join("&lt;").split(">").join("&gt;");',
   'if (balance - amount < 0) { return reject(new Error("insufficient funds")); }',
   'await db.transaction(async tx => { await tx.update(order); await tx.insert(log); });',
   'const parsed = JSON.parse(raw || "{}"); return parsed.data ?? [];',
@@ -35,69 +41,77 @@ const BASES = [
   'const [major] = process.versions.node.split("."); if (Number(major) < 18) exit(1);',
 ];
 
-// Cosmetic disguises an agent (or reformatter) typically applies when it
-// "re-discovers" the same fix: whitespace/layout churn, added comments,
-// different string messages, different numeric constants.
-const DISGUISES = [
-  ['reflowed whitespace', (s) => s.replace(/ /g, '  ').replace(/; /g, ';\n  ')],
+// Same code, cosmetic churn only — re-applying these IS re-applying the fix.
+// (Reflow inserts line breaks after statement boundaries; it must not touch
+// string contents — altering a string's interior IS a literal change.)
+const COSMETIC = [
+  ['reflowed statements', (s) => s.replace(/; /g, ';\n    ')],
   ['inline comment added', (s) => `${s} // make sure this handles the edge case`],
   ['leading comment added', (s) => `/* second attempt at the fix */ ${s}`],
-  ['string literals changed', (s) => s.replace(/"([^"]*)"/g, '"changed-text"')],
-  ['number literals changed', (s) => s.replace(/\b\d+\b/g, '9876')],
-  ['mixed: comments + literals', (s) => `// retry\n${s.replace(/\b\d+\b/g, '42').replace(/ /g, '  ')}`],
 ];
 
-function sim(a, b) {
+// Same shape, different constants — often a LEGITIMATE new experiment.
+const LITERAL = [
+  ['string literals changed', (s) => s.replace(/"([^"]*)"/g, '"changed-text"')],
+  ['number literals changed', (s) => s.replace(/\b\d+\b/g, '9876')],
+  ['both changed', (s) => s.replace(/"([^"]*)"/g, '"x"').replace(/\b\d+\b/g, '42')],
+];
+
+function channels(a, b) {
   const fa = fingerprint({ filePath: 'bench.js', changedCode: a });
   const fb = fingerprint({ filePath: 'bench.js', changedCode: b });
-  if (fa.intentHash === fb.intentHash) return 1;
-  return tokenSimilarity(fa.tokens, fb.tokens);
+  const raw = fa.rawHash === fb.rawHash;
+  const collapsed =
+    fa.intentHash === fb.intentHash ? 1 : tokenSimilarity(fa.tokens, fb.tokens);
+  return { raw, collapsed: collapsed >= THRESHOLD };
 }
 
-// --- repeat-fix detection: every disguise of a base must match that base ---
-let repeatTotal = 0;
-let repeatCaught = 0;
-const misses = [];
+let cosmeticTotal = 0, cosmeticHard = 0;
+const cosmeticMiss = [];
 for (const base of BASES) {
-  for (const [name, disguise] of DISGUISES) {
-    repeatTotal++;
-    const s = sim(base, disguise(base));
-    if (s >= THRESHOLD) repeatCaught++;
-    else misses.push({ name, base: base.slice(0, 50), s: s.toFixed(3) });
+  for (const [name, fn] of COSMETIC) {
+    cosmeticTotal++;
+    const c = channels(base, fn(base));
+    if (c.raw) cosmeticHard++;
+    else cosmeticMiss.push({ name, base: base.slice(0, 50) });
   }
 }
 
-// --- false blocks: no pair of DIFFERENT bases may match ---
-let distinctTotal = 0;
-let falseBlocks = 0;
-const collisions = [];
+let literalTotal = 0, literalRouted = 0, literalWrongBlock = 0;
+const literalMiss = [];
+for (const base of BASES) {
+  for (const [name, fn] of LITERAL) {
+    const variant = fn(base);
+    if (variant === base) continue; // base had no literal of that kind
+    literalTotal++;
+    const c = channels(base, variant);
+    if (c.raw) literalWrongBlock++; // would hard-block a parameter change — BAD
+    else if (c.collapsed) literalRouted++; // correctly routed to note-and-allow
+    else literalMiss.push({ name, base: base.slice(0, 50) });
+  }
+}
+
+let distinctTotal = 0, distinctHits = 0;
 for (let i = 0; i < BASES.length; i++) {
   for (let j = i + 1; j < BASES.length; j++) {
     distinctTotal++;
-    const s = sim(BASES[i], BASES[j]);
-    if (s >= THRESHOLD) {
-      falseBlocks++;
-      collisions.push({ i, j, s: s.toFixed(3) });
-    }
+    const c = channels(BASES[i], BASES[j]);
+    if (c.raw || c.collapsed) distinctHits++;
   }
 }
 
-const pct = (n, d) => ((100 * n) / d).toFixed(1) + '%';
-console.log('RegressionLedger fingerprint benchmark (deterministic)');
-console.log('  threshold:', THRESHOLD);
+const pct = (n, d) => (d ? ((100 * n) / d).toFixed(1) + '%' : 'n/a');
+console.log('RegressionLedger fingerprint benchmark (deterministic, two-channel)');
+console.log('  collapsed-similarity threshold:', THRESHOLD);
 console.log('');
-console.log(`  Disguised repeat fixes caught : ${repeatCaught}/${repeatTotal}  (${pct(repeatCaught, repeatTotal)})`);
-console.log(`  False blocks on distinct fixes: ${falseBlocks}/${distinctTotal}  (${pct(falseBlocks, distinctTotal)})`);
+console.log(`  1. Cosmetic re-applies HARD-matched (raw)   : ${cosmeticHard}/${cosmeticTotal}  (${pct(cosmeticHard, cosmeticTotal)})`);
+console.log(`  2. Literal variants routed to note-not-block : ${literalRouted}/${literalTotal}  (${pct(literalRouted, literalTotal)})`);
+console.log(`     ...wrongly hard-blocked (false positives) : ${literalWrongBlock}/${literalTotal}`);
+console.log(`  3. Distinct fixes matching either channel    : ${distinctHits}/${distinctTotal}  (${pct(distinctHits, distinctTotal)})`);
 console.log('');
-if (misses.length) {
-  console.log('  Missed disguises:');
-  for (const m of misses) console.log(`    - [${m.name}] sim=${m.s} :: ${m.base}…`);
-}
-if (collisions.length) {
-  console.log('  Collisions (false blocks):');
-  for (const c of collisions) console.log(`    - bases #${c.i} vs #${c.j} sim=${c.s}`);
-}
-if (!misses.length && !falseBlocks) {
-  console.log('  ✓ 100% of disguised repeats caught, zero false blocks.');
-}
-process.exitCode = misses.length || falseBlocks ? 1 : 0;
+for (const m of cosmeticMiss) console.log(`  MISS cosmetic [${m.name}] :: ${m.base}…`);
+for (const m of literalMiss) console.log(`  MISS literal  [${m.name}] :: ${m.base}…`);
+
+const ok = !cosmeticMiss.length && !literalWrongBlock && !distinctHits && !literalMiss.length;
+if (ok) console.log('  ✓ cosmetic repeats hard-blocked, parameter changes never blocked, distinct fixes untouched.');
+process.exitCode = ok ? 0 : 1;

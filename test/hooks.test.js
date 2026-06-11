@@ -113,6 +113,41 @@ test('minFailures=2 requires two failures before blocking', () => {
   assert.match(res.json.hookSpecificOutput.permissionDecisionReason, /failed 2 times/i);
 });
 
+test('LITERAL VARIANT: changing a constant is NEVER blocked — it gets a note and a hearing', () => {
+  const { cwd, file } = project();
+  // Agent tries timeout 5000 and it fails.
+  const v1 = 'const result = await retry(() => fetchData(url, { timeout: 5000 }), 3);';
+  handlePostToolUse(edit(cwd, file, v1, 's1'));
+  handlePostToolUse(bash(cwd, 'npm test', 'Tests: 1 failed\nTimeoutError: request timed out', 's1'));
+
+  // The CORRECT next experiment: same code, timeout 30000.
+  const v2 = 'const result = await retry(() => fetchData(url, { timeout: 30000 }), 3);';
+  const res = handlePreToolUse(edit(cwd, file, v2, 's2'));
+  const out = res.json && res.json.hookSpecificOutput;
+  assert.ok(out, 'expected a response');
+  assert.equal(out.permissionDecision, undefined, 'a parameter change must NEVER be denied');
+  assert.match(out.additionalContext, /not a block/i);
+  assert.match(out.additionalContext, /constant|string values/i);
+
+  // But re-applying v1 VERBATIM is still hard-blocked.
+  const res2 = handlePreToolUse(edit(cwd, file, v1, 's2'));
+  assert.equal(res2.json.hookSpecificOutput.permissionDecision, 'deny', 'verbatim repeat still blocks');
+});
+
+test('LITERAL VARIANT: the variant earns its own verdict — if it also fails, ITS verbatim repeat blocks', () => {
+  const { cwd, file } = project();
+  const v1 = 'setLimit(100);';
+  const v2 = 'setLimit(500);';
+  handlePostToolUse(edit(cwd, file, v1, 's1'));
+  handlePostToolUse(bash(cwd, 'npm test', '1 failed', 's1'));
+  // v2 allowed (note only), then fails too
+  handlePostToolUse(edit(cwd, file, v2, 's2'));
+  handlePostToolUse(bash(cwd, 'npm test', '1 failed', 's2'));
+  // Now v2 verbatim is blocked on its own record.
+  const res = handlePreToolUse(edit(cwd, file, v2, 's3'));
+  assert.equal(res.json.hookSpecificOutput.permissionDecision, 'deny');
+});
+
 test('paraphrased (renamed) repeat of a failed fix gets a NOTE, never a block', () => {
   const { cwd, file } = project();
   // Original fix fails. It's long enough to have a real "shape".

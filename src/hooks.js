@@ -95,19 +95,32 @@ function relativeTime(ts) {
 }
 
 function buildBlockMessage(hit, file, symbol) {
-  const pct = Math.round(hit.similarity * 100);
   const where = symbol === '(file scope)' ? file : `${symbol}() in ${file}`;
   const ago = relativeTime(hit.attempt.ts);
   const times = hit.failCount > 1 ? ` It has failed ${hit.failCount} times.` : '';
   const why = hit.attempt.errorSignature
     ? ` It failed with: ${hit.attempt.errorSignature}`
     : ' It failed verification.';
-  const same = pct >= 100 ? 'the same fix' : `a ${pct}%-identical fix`;
+  const batch =
+    hit.attempt.batchSize > 1
+      ? ` (Note: it failed alongside ${hit.attempt.batchSize - 1} other edit(s) in one run — attribution is approximate; \`rl unblock ${file}\` if it was collateral.)`
+      : '';
   return (
-    `RegressionLedger: you already tried ${same} to ${where} ${ago}.${why}${times} ` +
-    `Re-applying it will reproduce the same failure. Change strategy instead — ` +
-    `address a different root cause or layer, or read why the earlier attempt failed. ` +
+    `RegressionLedger: you already tried this exact fix to ${where} ${ago}.${why}${times} ` +
+    `Re-applying it verbatim will reproduce the same failure. Change strategy instead — ` +
+    `address a different root cause or layer, or read why the earlier attempt failed.${batch} ` +
     `Run \`rl show ${file}\` to see the full attempt history.`
+  );
+}
+
+function buildLiteralNote(hit, file) {
+  const why = hit.attempt.errorSignature ? ` (it failed with: ${hit.attempt.errorSignature})` : '';
+  return (
+    `RegressionLedger note (not a block): this edit is the same code SHAPE as a fix that previously failed in ${file}, ` +
+    `differing only in constant/string values${why}. If changing that value IS your hypothesis ` +
+    `(timeout, limit, key name…), proceed — this variant gets its own verdict. ` +
+    `But if the approach is unchanged and only the wording moved, expect the same failure. ` +
+    `Run \`rl why ${file}\` for the history.`
   );
 }
 
@@ -184,21 +197,38 @@ export function handlePreToolUse(input) {
     });
     const hit = findSimilarFailure(
       root,
-      { file: rel, symbol: fp.symbol, intentHash: fp.intentHash, tokens: fp.tokens },
+      { file: rel, symbol: fp.symbol, intentHash: fp.intentHash, rawHash: fp.rawHash, tokens: fp.tokens },
       config
     );
-    if (hit && hit.failCount >= (config.minFailures || 1)) {
+    // HARD BLOCK only on the RAW channel: same code, constants included. A
+    // collapsed-only match (same shape, different literals) is frequently a
+    // LEGITIMATE retry — timeout 5000→30000 — and must never be denied; it
+    // gets a note and one hearing instead. (Found by community stress-testing:
+    // the old behavior actively pushed agents away from correct fixes.)
+    if (hit && hit.rawExact && hit.failCount >= (config.minFailures || 1)) {
       const msg = buildBlockMessage(hit, rel, fp.symbol);
       debug(config.mode === 'block' ? 'BLOCK' : 'WARN', rel, fp.symbol, hit.similarity);
       recordHit(root, {
         mode: config.mode === 'warn' ? 'warn' : 'block',
         file: rel,
         symbol: fp.symbol,
-        similarity: Math.round(hit.similarity * 100) / 100,
+        similarity: 1,
         failCount: hit.failCount,
         intentHash: fp.intentHash,
       });
       return config.mode === 'warn' ? preContext(`⚠ ${msg}`) : deny(msg);
+    }
+    if (hit && !hit.rawExact) {
+      debug('LITERAL-VARIANT NOTE', rel, fp.symbol, hit.similarity);
+      recordHit(root, {
+        mode: 'note',
+        file: rel,
+        symbol: fp.symbol,
+        similarity: Math.round(hit.similarity * 100) / 100,
+        failCount: hit.failCount,
+        intentHash: fp.intentHash,
+      });
+      return preContext(buildLiteralNote(hit, rel));
     }
 
     // Second channel: structural shape. Only consulted when the semantic
@@ -289,6 +319,7 @@ export function handlePostToolUse(input) {
         file: rel,
         symbol: fp.symbol,
         intentHash: fp.intentHash,
+        rawHash: fp.rawHash,
         tokens: fp.tokens,
         preview: truncate(ch.newCode, 120),
         tool: toolName,

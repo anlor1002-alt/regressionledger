@@ -122,15 +122,30 @@ export function resolvePending(root, session, outcome, errorSignature = null) {
         justResolved.push(a);
       }
     }
+    // Honest attribution: when several edits are settled by ONE run, each
+    // verdict is approximate (one bad edit can sink the batch). Record the
+    // batch size so block messages can disclose it.
+    if (outcome === 'fail' && justResolved.length > 1) {
+      for (const a of justResolved) a.batchSize = justResolved.length;
+    }
     if (outcome === 'pass' && justResolved.length) {
       // Retire (don't delete) stale failures that this pass supersedes — the
-      // retirement keeps a receipt: which attempt superseded it and when.
-      // Retired entries stop blocking (matching is outcome === 'fail' only)
-      // but remain auditable in `rl show` / `rl report`.
-      const passedByKey = new Map(justResolved.map((a) => [`${a.file}::${a.intentHash}`, a.id]));
+      // retirement keeps a receipt. Keyed on the RAW channel when available:
+      // the literal-variant that passed (timeout=30000) must NOT acquit the
+      // variant that failed (timeout=5000) — that one is still a true failure
+      // worth blocking if re-applied verbatim. Legacy entries without a
+      // rawHash retire on the collapsed key (the only identity they have).
+      const passedRaw = new Map();
+      const passedIntent = new Map();
+      for (const a of justResolved) {
+        if (a.rawHash) passedRaw.set(`${a.file}::${a.rawHash}`, a.id);
+        passedIntent.set(`${a.file}::${a.intentHash}`, a.id);
+      }
       for (const a of ledger.attempts) {
         if (a.outcome !== 'fail' || justResolved.includes(a)) continue;
-        const supersededBy = passedByKey.get(`${a.file}::${a.intentHash}`);
+        const supersededBy = a.rawHash
+          ? passedRaw.get(`${a.file}::${a.rawHash}`)
+          : passedIntent.get(`${a.file}::${a.intentHash}`);
         if (supersededBy) {
           a.outcome = 'retired';
           a.retiredTs = now;
@@ -146,18 +161,31 @@ export function resolvePending(root, session, outcome, errorSignature = null) {
 
 /**
  * Find the closest prior FAILED attempt to a proposed change.
- * @returns {{attempt:object, similarity:number, failCount:number}|null} best
- *          match at/above the configured threshold (with how many distinct
- *          failures matched), or null.
+ *
+ * Two channels:
+ *  - rawExact: an attempt with the SAME rawHash failed — the retry is the same
+ *    code, constants included. This is the only evidence strong enough to
+ *    hard-block (changing a constant is often the legitimate next experiment).
+ *  - collapsed similarity: same shape with literals abstracted — ambiguous
+ *    ("disguise, or parameter change?"); callers should warn, not deny.
+ *
+ * @returns {{attempt:object, similarity:number, failCount:number, rawExact:boolean}|null}
  */
 export function findSimilarFailure(root, target, config = loadConfig(root)) {
   const ledger = loadLedger(root);
+  let bestRaw = null;
   let best = null;
   let failCount = 0;
   for (const a of ledger.attempts) {
     if (a.outcome !== 'fail') continue;
     if (a.file !== target.file) continue;
     if (!config.crossSymbol && a.symbol !== target.symbol) continue;
+
+    if (a.rawHash && target.rawHash && a.rawHash === target.rawHash) {
+      failCount++;
+      if (!bestRaw) bestRaw = a;
+      continue;
+    }
 
     let sim;
     if (a.intentHash === target.intentHash) {
@@ -172,7 +200,8 @@ export function findSimilarFailure(root, target, config = loadConfig(root)) {
       if (!best || sim > best.similarity) best = { attempt: a, similarity: sim };
     }
   }
-  return best ? { ...best, failCount } : null;
+  if (bestRaw) return { attempt: bestRaw, similarity: 1, failCount, rawExact: true };
+  return best ? { ...best, failCount, rawExact: false } : null;
 }
 
 /**
@@ -240,6 +269,7 @@ export function importAttempts(root, attempts, from = 'import') {
         file: a.file.slice(0, 500),
         symbol: str(a.symbol, 200) || '(file scope)',
         intentHash: a.intentHash.slice(0, 64),
+        rawHash: str(a.rawHash, 64) || undefined,
         tokens: Array.isArray(a.tokens) ? a.tokens.filter((t) => typeof t === 'string').slice(0, 5000) : [],
         preview: str(a.preview, 120),
         tool: str(a.tool, 32) || 'Edit',

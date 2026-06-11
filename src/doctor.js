@@ -110,6 +110,7 @@ export function runDoctor(cwd = process.cwd()) {
       file: 'doctor-probe.js',
       symbol: fp.symbol,
       intentHash: fp.intentHash,
+      rawHash: fp.rawHash,
       tokens: fp.tokens,
       preview: SNIPPET,
       tool: 'Edit',
