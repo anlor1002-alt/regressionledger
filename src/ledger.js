@@ -5,7 +5,31 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { atomicWrite, debug, withLock } from './util.js';
+import { atomicWrite, debug, withLock, sanitizeForContext } from './util.js';
+
+/**
+ * Evict by VALUE, not by position: an old `fail` is still load-bearing (it
+ * blocks), so when the ledger exceeds the cap we drop oldest pass/retired/
+ * pending entries first, and only touch fails when nothing else is left.
+ * (P3 from a community gate review: positional slice() silently dropped
+ * active failure records under churn.)
+ */
+function evictOverCap(ledger, max) {
+  if (ledger.attempts.length <= max) return;
+  const evictable = [];
+  for (let i = 0; i < ledger.attempts.length && evictable.length < ledger.attempts.length - max; i++) {
+    if (ledger.attempts[i].outcome !== 'fail') evictable.push(i);
+  }
+  let over = ledger.attempts.length - max - evictable.length;
+  const drop = new Set(evictable);
+  for (let i = 0; over > 0 && i < ledger.attempts.length; i++) {
+    if (!drop.has(i)) {
+      drop.add(i);
+      over--;
+    }
+  }
+  ledger.attempts = ledger.attempts.filter((_, i) => !drop.has(i));
+}
 import { tokenSimilarity } from './similarity.js';
 
 export const DEFAULT_CONFIG = {
@@ -93,9 +117,7 @@ export function addAttempt(root, attempt) {
     const ledger = loadLedger(root);
     const config = loadConfig(root);
     ledger.attempts.push(entry);
-    if (ledger.attempts.length > config.maxLedger) {
-      ledger.attempts = ledger.attempts.slice(ledger.attempts.length - config.maxLedger);
-    }
+    evictOverCap(ledger, config.maxLedger);
     saveLedger(root, ledger);
   });
   return entry;
@@ -173,16 +195,31 @@ export function resolvePending(root, session, outcome, errorSignature = null) {
  */
 export function findSimilarFailure(root, target, config = loadConfig(root)) {
   const ledger = loadLedger(root);
+
+  // ACQUITTAL CHECK first: if this exact code (raw channel) has a recorded
+  // PASS in this file, it is proven-good — no block is possible (retire-on-
+  // pass already cleared same-raw fails) and no shape-note may second-guess
+  // it. Without this, a fix that already passed kept getting "expect the same
+  // failure" notes every time it was touched, because old sibling-variant
+  // failures still collapsed-matched it. (P0 from a community gate review.)
+  if (target.rawHash) {
+    const provenGood = ledger.attempts.some(
+      (a) => a.file === target.file && a.outcome === 'pass' && a.rawHash === target.rawHash
+    );
+    if (provenGood) return null;
+  }
+
   let bestRaw = null;
+  let rawFailCount = 0; // failures of THIS exact code only — gates the hard block
   let best = null;
-  let failCount = 0;
+  let collapsedCount = 0; // same-shape failures (display/context only)
   for (const a of ledger.attempts) {
     if (a.outcome !== 'fail') continue;
     if (a.file !== target.file) continue;
     if (!config.crossSymbol && a.symbol !== target.symbol) continue;
 
     if (a.rawHash && target.rawHash && a.rawHash === target.rawHash) {
-      failCount++;
+      rawFailCount++;
       if (!bestRaw) bestRaw = a;
       continue;
     }
@@ -196,12 +233,17 @@ export function findSimilarFailure(root, target, config = loadConfig(root)) {
       sim = tokenSimilarity(aTokens, tTokens);
     }
     if (sim >= config.threshold) {
-      failCount++;
+      collapsedCount++;
       if (!best || sim > best.similarity) best = { attempt: a, similarity: sim };
     }
   }
-  if (bestRaw) return { attempt: bestRaw, similarity: 1, failCount, rawExact: true };
-  return best ? { ...best, failCount, rawExact: false } : null;
+  // failCount for a raw hit counts ONLY raw-channel failures: minFailures is a
+  // promise about THIS code having failed N times — a sibling variant's
+  // failure must not be able to arm someone else's hard block. (P1 from the
+  // same review: 5000 fails once + 7000 fails once must not read as "5000
+  // failed twice".)
+  if (bestRaw) return { attempt: bestRaw, similarity: 1, failCount: rawFailCount, rawExact: true };
+  return best ? { ...best, failCount: collapsedCount, rawExact: false } : null;
 }
 
 /**
@@ -271,10 +313,13 @@ export function importAttempts(root, attempts, from = 'import') {
         intentHash: a.intentHash.slice(0, 64),
         rawHash: str(a.rawHash, 64) || undefined,
         tokens: Array.isArray(a.tokens) ? a.tokens.filter((t) => typeof t === 'string').slice(0, 5000) : [],
-        preview: str(a.preview, 120),
+        // Imported text is UNTRUSTED and flows into agent context (briefings,
+        // block messages): neutralize control chars / newline structure here,
+        // and renderers additionally label it as imported data.
+        preview: sanitizeForContext(str(a.preview, 240), 120),
         tool: str(a.tool, 32) || 'Edit',
         outcome: a.outcome,
-        errorSignature: str(a.errorSignature, 200) || null,
+        errorSignature: sanitizeForContext(str(a.errorSignature, 400), 200) || null,
         resolvedTs: Number(a.resolvedTs) || null,
         retiredTs: Number(a.retiredTs) || undefined,
         retiredBy: str(a.retiredBy, 16) || undefined,
@@ -285,9 +330,7 @@ export function importAttempts(root, attempts, from = 'import') {
       added++;
     }
     // Imports respect the same cap as organic recording.
-    if (ledger.attempts.length > config.maxLedger) {
-      ledger.attempts = ledger.attempts.slice(ledger.attempts.length - config.maxLedger);
-    }
+    evictOverCap(ledger, config.maxLedger);
     if (added) saveLedger(root, ledger);
     return { added, skipped };
   });

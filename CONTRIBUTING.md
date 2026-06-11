@@ -53,6 +53,25 @@ demo/simulate.js   no-Claude-needed walkthrough
 - **Keep stdout clean in hook mode.** Only the JSON response may go to stdout;
   everything else goes to stderr behind `RL_DEBUG`.
 
+## Release gate — four adversarial questions
+
+Every release must answer these four questions **with tests, not prose**
+(adopted verbatim from a community gate review that caught what two automated
+review passes missed):
+
+1. **Does every new guarantee ship with its own adversarial test?** A test
+   that proves what we want to be true is not enough — each CHANGELOG claim
+   needs a test that *tries to make it false*.
+2. **Which paths can lose or clobber a ledger write?** Any change touching
+   concurrency, locking, or eviction must argue: in the worst case, does the
+   guardrail fail loudly or silently?
+3. **Does any external text (test output, imported ledgers, agent-written
+   code) flow into agent context, and is it neutralized?** New injection
+   surfaces must be declared in the PR, not discovered by reviewers.
+4. **Is the benchmark answering a question it set itself?** Whenever the
+   definition of "match" changes, the benchmark must change with it and state
+   explicitly what it does NOT measure.
+
 ## Reporting bugs
 
 Include the smallest edit + test output that reproduces a wrong block (or a

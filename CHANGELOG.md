@@ -6,6 +6,42 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-06-11
+
+The gate-review release. The same community reviewer came back harder — every
+finding below shipped with a repro, and they retracted two of their own
+accusations when their repros failed. That bar is now codified in
+CONTRIBUTING.md ("Release gate — four adversarial questions").
+
+### Fixed
+- **P0 — proven-good code is never second-guessed.** Code with a recorded PASS
+  (raw channel) previously still received "expect the same failure" notes,
+  because old sibling-variant failures collapsed-matched it. Acquittal check
+  now silences ALL channels (collapsed and structural) for code that has
+  passed.
+- **P1 — `minFailures` counts only THIS exact code.** `failCount` previously
+  mixed raw-exact and shape-similar failures, so `5000` failing once plus
+  `7000` failing once could arm a "failed 2 times" hard block against `5000`.
+  The hard-block gate now counts raw-channel failures exclusively.
+- **P1 — the ledger lock can no longer be stolen from a live holder.** Lock
+  staleness was mtime-based (>10s), so a slow-but-alive writer could have its
+  lock stolen mid-write, and its release could then unlink the thief's lock —
+  a cascade. Locks now record `{pid, token}`: stealing requires a DEAD holder,
+  release only removes a lock carrying our own token, and waiters facing a
+  live holder wait 15s before the documented proceed-unlocked last resort.
+- **P3 — eviction is by value, not position.** The cap previously kept the
+  newest entries regardless of kind, so churn could silently evict still-
+  blocking failures. Pass/retired/pending entries are now evicted first.
+
+### Security
+- **P2 — imported ledger text is neutralized and labeled.** `rl import` is a
+  cross-machine channel; imported `errorSignature`/`preview` previously flowed
+  verbatim into briefings and block messages. They are now structurally
+  neutralized (control chars stripped, newline structure flattened) at import
+  AND at render, and tagged `[imported verdict]` wherever shown. Honest
+  framing: this is structural neutralization — content remains data, labeled
+  as such; treat shared ledgers like you treat dependencies.
+
 ## [0.9.0] - 2026-06-10
 
 The "right to retry" release. A community member cloned the repo, stress-tested
@@ -197,7 +233,8 @@ First public release.
 - **Zero runtime dependencies**; hooks fail open on any error.
 - 35 tests (`node:test`) and a no-Claude doom-loop demo (`npm run demo`).
 
-[Unreleased]: https://github.com/anlor1002-alt/regressionledger/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/anlor1002-alt/regressionledger/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/anlor1002-alt/regressionledger/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.7.0...v0.8.0

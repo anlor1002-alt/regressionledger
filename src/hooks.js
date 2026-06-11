@@ -22,7 +22,16 @@ import {
   recordHit,
 } from './ledger.js';
 import { isVerificationCommand, detectOutcome } from './outcome.js';
-import { truncate, debug } from './util.js';
+import { truncate, debug, sanitizeForContext } from './util.js';
+
+// Render an attempt's error signature for injection into agent context:
+// neutralized structurally, and labeled when it arrived via `rl import`
+// (cross-machine ledgers are an untrusted channel — the text is data).
+function renderSig(attempt) {
+  const sig = sanitizeForContext(attempt.errorSignature, 200);
+  if (!sig) return '';
+  return attempt.importedFrom ? `${sig} [imported verdict]` : sig;
+}
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit']);
 
@@ -98,9 +107,8 @@ function buildBlockMessage(hit, file, symbol) {
   const where = symbol === '(file scope)' ? file : `${symbol}() in ${file}`;
   const ago = relativeTime(hit.attempt.ts);
   const times = hit.failCount > 1 ? ` It has failed ${hit.failCount} times.` : '';
-  const why = hit.attempt.errorSignature
-    ? ` It failed with: ${hit.attempt.errorSignature}`
-    : ' It failed verification.';
+  const sig = renderSig(hit.attempt);
+  const why = sig ? ` It failed with: ${sig}` : ' It failed verification.';
   const batch =
     hit.attempt.batchSize > 1
       ? ` (Note: it failed alongside ${hit.attempt.batchSize - 1} other edit(s) in one run — attribution is approximate; \`rl unblock ${file}\` if it was collateral.)`
@@ -114,7 +122,8 @@ function buildBlockMessage(hit, file, symbol) {
 }
 
 function buildLiteralNote(hit, file) {
-  const why = hit.attempt.errorSignature ? ` (it failed with: ${hit.attempt.errorSignature})` : '';
+  const sig = renderSig(hit.attempt);
+  const why = sig ? ` (it failed with: ${sig})` : '';
   return (
     `RegressionLedger note (not a block): this edit is the same code SHAPE as a fix that previously failed in ${file}, ` +
     `differing only in constant/string values${why}. If changing that value IS your hypothesis ` +
@@ -139,6 +148,14 @@ function findParaphrasedFailure(root, file, fp) {
   // and shingling huge streams against every attempt is real synchronous latency.
   if (target.length < 15 || target.length > 3000) return null;
   const ledger = loadLedger(root);
+  // Acquittal applies here too: proven-good code (a recorded PASS with this
+  // exact rawHash) must get total silence — no channel may second-guess it.
+  if (fp.rawHash) {
+    const provenGood = ledger.attempts.some(
+      (a) => a.file === file && a.outcome === 'pass' && a.rawHash === fp.rawHash
+    );
+    if (provenGood) return null;
+  }
   let best = null;
   for (const a of ledger.attempts) {
     if (a.outcome !== 'fail') continue;
@@ -347,7 +364,7 @@ export function handlePostToolUse(input) {
       if (wall) {
         msg =
           `RegressionLedger ESCALATION: ${wall.distinct} distinct approaches have now failed with the same error — ` +
-          `"${wall.signature}" (${wall.files.join(', ')}). The patches differ; the error doesn't. That means the ` +
+          `"${sanitizeForContext(wall.signature, 200)}" (${wall.files.join(', ')}). The patches differ; the error doesn't. That means the ` +
           `DIAGNOSIS is wrong, not the patches. STOP editing. Before the next change: (1) re-read the failing test and ` +
           `the error closely, (2) state 2-3 hypotheses for the root cause, (3) verify one with a read or a log — then fix. ` +
           `Run \`rl show --by-error\` to see the wall.`;

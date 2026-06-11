@@ -231,7 +231,10 @@ post-compaction** persistence, and a **hard block** that the model can't ignore.
   fix, renamed" — without ever blocking on the weaker signal.
 - **🤝 Herd immunity.** `rl export` / `rl import` share settled verdicts between
   machines and teammates: *your agent inherits the dead ends my agent already
-  paid for.* Failures stay attributed (`importedFrom`) and auditable.
+  paid for.* Failures stay attributed (`importedFrom`) and auditable. Imported
+  text is structurally neutralized and labeled `[imported verdict]` wherever it
+  reaches agent context — but treat shared ledgers like dependencies: import
+  from people you trust.
 
 ## FAQ
 

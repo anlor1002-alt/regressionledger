@@ -1,6 +1,6 @@
 // Small dependency-free helpers shared across RegressionLedger.
 import { createHash } from 'node:crypto';
-import { writeFileSync, renameSync, mkdirSync, openSync, closeSync, unlinkSync, statSync } from 'node:fs';
+import { writeFileSync, renameSync, mkdirSync, openSync, closeSync, unlinkSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 /**
@@ -66,6 +66,24 @@ export function truncate(str, max = 200) {
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 }
 
+/**
+ * Neutralize text that flows from external sources (test output, imported
+ * ledgers, agent-written code) into the agent's context: strip control
+ * characters, collapse all whitespace to single spaces (no smuggled
+ * newline-structured "instructions"), and cap length. Structural
+ * neutralization only — content is data and is labeled as such at render time.
+ */
+export function sanitizeForContext(str, max = 200) {
+  if (!str) return '';
+  let out = '';
+  for (const ch of String(str)) {
+    const c = ch.charCodeAt(0);
+    out += c < 32 || (c >= 127 && c <= 159) ? ' ' : ch;
+  }
+  const t = out.replace(/  +/g, ' ').trim();
+  return t.length > max ? t.slice(0, max - 1) + String.fromCharCode(8230) : t;
+}
+
 /** Synchronous sleep without busy-spinning the CPU. */
 function sleepSync(ms) {
   try {
@@ -77,46 +95,83 @@ function sleepSync(ms) {
   }
 }
 
+function pidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true; // signal 0 delivered: process exists
+  } catch (err) {
+    return err.code === 'EPERM'; // exists but not ours; anything else = dead
+  }
+}
+
 /**
  * Run `fn` while holding an exclusive lock on `dir`, so concurrent hook
  * processes can't lose each other's writes during a read-modify-write of the
- * ledger. Lock acquisition is best-effort: a stale lock (>10s) is stolen, and
- * after `maxWaitMs` we proceed unlocked rather than ever hanging the agent — a
- * rare lost update is far better than a stuck tool call.
+ * ledger.
+ *
+ * Safety properties (hardened after a community gate review):
+ *  - The lock records {pid, token}. A lock is only "stale" when its HOLDER
+ *    PROCESS IS DEAD — never merely old, so a live-but-slow holder (big ledger,
+ *    long shingling) cannot have its lock stolen mid-write.
+ *  - Release deletes the lock only if it still carries OUR token, so even in a
+ *    pathological race we can never unlink someone else's lock.
+ *  - A waiter facing a LIVE holder waits up to `maxWaitMs` (15s) and only then
+ *    proceeds unlocked as the documented last resort — hooks must never hang
+ *    the agent indefinitely, and a >15s ledger write by a live process is the
+ *    truly rare case, not parallel tool calls.
  */
-export function withLock(dir, fn, { maxWaitMs = 4000 } = {}) {
+export function withLock(dir, fn, { maxWaitMs = 15000 } = {}) {
   mkdirSync(dir, { recursive: true });
   const lockPath = join(dir, '.lock');
+  const token = `${process.pid}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const start = Date.now();
-  let fd = null;
+  let held = false;
   for (;;) {
     try {
-      fd = openSync(lockPath, 'wx');
+      const fd = openSync(lockPath, 'wx');
+      writeFileSync(fd, JSON.stringify({ pid: process.pid, token }));
+      closeSync(fd);
+      held = true;
       break;
     } catch (err) {
-      if (err.code !== 'EEXIST') break; // unexpected; proceed unlocked
+      if (err.code !== 'EEXIST') break; // unexpected fs error; proceed unlocked
+      let holder = null;
       try {
-        if (Date.now() - statSync(lockPath).mtimeMs > 10000) {
-          unlinkSync(lockPath); // steal a stale lock
+        holder = JSON.parse(readFileSync(lockPath, 'utf8'));
+      } catch {
+        /* unreadable/vanished — re-check liveness as unknown below */
+      }
+      if (holder && !pidAlive(holder.pid)) {
+        try {
+          unlinkSync(lockPath); // holder is dead: safe to steal
+        } catch {}
+        continue;
+      }
+      if (!holder) {
+        // Unreadable lock (mid-write or corrupt): brief grace, then treat a
+        // still-unreadable lock as abandoned.
+        if (Date.now() - start > 1000) {
+          try {
+            unlinkSync(lockPath);
+          } catch {}
           continue;
         }
-      } catch {
-        /* lock vanished between calls; retry */
       }
-      if (Date.now() - start > maxWaitMs) break; // give up waiting, proceed
-      sleepSync(20);
+      if (Date.now() - start > maxWaitMs) break; // live holder, out of patience
+      sleepSync(25);
     }
   }
   try {
     return fn();
   } finally {
-    if (fd !== null) {
+    if (held) {
       try {
-        closeSync(fd);
-      } catch {}
-      try {
-        unlinkSync(lockPath);
-      } catch {}
+        const cur = JSON.parse(readFileSync(lockPath, 'utf8'));
+        if (cur && cur.token === token) unlinkSync(lockPath);
+      } catch {
+        /* lock already gone or not ours — leave it alone */
+      }
     }
   }
 }

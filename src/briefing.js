@@ -5,6 +5,7 @@
 
 import { loadLedger } from './ledger.js';
 import { groupByError } from './report.js';
+import { sanitizeForContext } from './util.js';
 
 const MAX_CHARS = 7000; // JSON escaping inflates output; stay well under the 10K hook cap
 
@@ -37,10 +38,11 @@ export function buildBriefing(root) {
     attempts.sort((x, y) => y.ts - x.ts);
     lines.push(`${file}:`);
     for (const a of attempts.slice(0, 4)) {
-      const sig = a.errorSignature ? ` → ${String(a.errorSignature).slice(0, 200)}` : '';
-      const what = String(a.preview || '').slice(0, 120) || String(a.intentHash ?? '').slice(0, 10);
-      const sym = a.symbol && a.symbol !== '(file scope)' ? String(a.symbol) + '(): ' : '';
-      lines.push(`  ✗ ${sym}${what}${sig}`);
+      const sig = a.errorSignature ? ` → ${sanitizeForContext(a.errorSignature, 200)}` : '';
+      const what = sanitizeForContext(a.preview, 120) || String(a.intentHash ?? '').slice(0, 10);
+      const sym = a.symbol && a.symbol !== '(file scope)' ? sanitizeForContext(a.symbol, 80) + '(): ' : '';
+      const imported = a.importedFrom ? ' [imported verdict]' : '';
+      lines.push(`  ✗ ${sym}${what}${sig}${imported}`);
     }
     if (attempts.length > 4) lines.push(`  …and ${attempts.length - 4} more failed attempt(s) here.`);
   }
@@ -51,7 +53,7 @@ export function buildBriefing(root) {
     lines.push('');
     lines.push('WALLS (multiple different attempts, same error — the diagnosis is wrong, not the patch):');
     for (const w of walls.slice(0, 5)) {
-      lines.push(`  ${w.count}× ${w.signature} — across ${w.files.join(', ')}`);
+      lines.push(`  ${w.count}× ${sanitizeForContext(w.signature, 200)} — across ${w.files.join(', ')}`);
     }
   }
 
