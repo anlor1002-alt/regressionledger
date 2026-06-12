@@ -348,7 +348,10 @@ export function handlePostToolUse(input) {
   if (toolName === 'Bash') {
     const command = (input.tool_input && input.tool_input.command) || '';
     if (!isVerificationCommand(command)) return allow();
-    const { outcome, errorSignature } = detectOutcome(extractResultText(input));
+    // Pass the command so classification is scoped to THIS runner's patterns —
+    // no cross-toolchain fail-pattern bleed (a pytest pass whose log mentions
+    // "FAIL" must not read as a failure).
+    const { outcome, errorSignature } = detectOutcome(extractResultText(input), command);
     if (!outcome) return allow();
     const count = resolvePending(root, session, outcome, errorSignature);
     debug('resolved', count, 'attempts as', outcome);

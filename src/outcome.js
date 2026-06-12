@@ -45,18 +45,8 @@ function extractSignature(toolchain, text) {
   return 'verification failed';
 }
 
-/**
- * Classify a verification run's output, with the evidence trail.
- * @returns {{outcome:'pass'|'fail'|null, errorSignature:string|null,
- *            matches:Array<{toolchain:string, kind:string, pattern:string}>}}
- */
-export function explainOutcome(text = '') {
-  const matches = [];
-  if (!text) return { outcome: null, errorSignature: null, matches };
-
-  // FAIL evidence first — a "3 failed, 5 passed" run is a fail, and pass
-  // markers must never override explicit failure evidence.
-  for (const t of TOOLCHAINS) {
+function judge(pools, text, matches, label) {
+  for (const t of pools) {
     const hard = firstMatch(t.fail, text);
     if (hard) {
       matches.push({ toolchain: t.name, kind: 'fail', pattern: String(hard) });
@@ -68,16 +58,49 @@ export function explainOutcome(text = '') {
       return { outcome: 'fail', errorSignature: extractSignature(t, text), matches };
     }
   }
-  // A toolchain's EXPLICIT pass evidence outranks GENERIC fail substrings —
-  // a passing verbose run may mention "AssertionError" inside a test name, and
-  // that must not convert a real pass into a recorded failure.
-  for (const t of TOOLCHAINS) {
+  for (const t of pools) {
     const ok = firstMatch(t.pass, text);
     if (ok) {
       matches.push({ toolchain: t.name, kind: 'pass', pattern: String(ok) });
       return { outcome: 'pass', errorSignature: null, matches };
     }
   }
+  return null;
+}
+
+/**
+ * Classify a verification run's output, with the evidence trail.
+ *
+ * When `command` is given (the real hook path always has it), classification is
+ * SCOPED to the toolchains whose command patterns match — a recognized runner
+ * is judged only by its OWN patterns. This kills cross-toolchain bleed: a
+ * passing pytest run whose log contains a jest-style "FAIL " banner is no
+ * longer misread as a failure, and the GENERIC `AssertionError`-in-prose
+ * substring can't fire for a known runner. Unrecognized signal under a known
+ * runner returns null (pending) rather than guessing — the safe direction.
+ * Without a command (direct callers/tests), the legacy all-toolchains +
+ * GENERIC fallback is used for back-compat.
+ * @returns {{outcome:'pass'|'fail'|null, errorSignature:string|null,
+ *            matches:Array<{toolchain:string, kind:string, pattern:string}>}}
+ */
+export function explainOutcome(text = '', command = null) {
+  const matches = [];
+  if (!text) return { outcome: null, errorSignature: null, matches };
+
+  if (command) {
+    const scoped = TOOLCHAINS.filter((t) => t.commands.some((re) => re.test(command)));
+    if (scoped.length) {
+      return judge(scoped, text, matches, 'scoped') || { outcome: null, errorSignature: null, matches };
+    }
+    // Command given but unrecognized — not a verification run we know; the
+    // hook already gates on isVerificationCommand, so this is reached only by
+    // odd direct callers. Leave pending rather than apply generic guesses.
+    return { outcome: null, errorSignature: null, matches };
+  }
+
+  // No command: legacy behavior. All toolchains, then GENERIC as a last resort.
+  const scopedResult = judge(TOOLCHAINS, text, matches, 'any');
+  if (scopedResult) return scopedResult;
 
   const gHard = firstMatch(GENERIC.fail, text);
   if (gHard) {
@@ -89,18 +112,16 @@ export function explainOutcome(text = '') {
     matches.push({ toolchain: 'generic', kind: 'fail-count', pattern: String(gCount) });
     return { outcome: 'fail', errorSignature: extractSignature(null, text), matches };
   }
-
   const gOk = firstMatch(GENERIC.pass, text);
   if (gOk) {
     matches.push({ toolchain: 'generic', kind: 'pass', pattern: String(gOk) });
     return { outcome: 'pass', errorSignature: null, matches };
   }
-
   return { outcome: null, errorSignature: null, matches };
 }
 
 /** @returns {{outcome:'pass'|'fail'|null, errorSignature:string|null}} */
-export function detectOutcome(text = '') {
-  const { outcome, errorSignature } = explainOutcome(text);
+export function detectOutcome(text = '', command = null) {
+  const { outcome, errorSignature } = explainOutcome(text, command);
   return { outcome, errorSignature };
 }

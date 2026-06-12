@@ -6,6 +6,30 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-06-11
+
+A 46-agent fuzz/review pass reproduced findings against HEAD. Most of its HIGH
+findings were already fixed in 0.10.0/0.10.1 (it ran on a 0.9.0 checkout) and
+were re-confirmed fixed here; these four genuinely reproduced on HEAD and are
+now closed, each with an adversarial test.
+
+### Fixed
+- **Cross-toolchain misclassification (false FAIL).** `explainOutcome` applied
+  every toolchain's fail patterns to every run, so a passing pytest log
+  containing a jest-style "FAIL" banner — or "Retrying 1 failed attempt" prose
+  — was recorded as a failure (then a wrongful future block). Classification is
+  now **scoped to the runner's own patterns** via the command (the hook passes
+  it); an unrecognized signal under a known runner stays pending. pytest's
+  loose `N failed` counter is gone (the `==== N failed ====` summary in `fail`
+  already covers real failures).
+- **`loadHits` crash on a corrupt hits.json.** A valid-JSON-but-not-array
+  `hits.json` (e.g. `{}`) crashed `rl stats` / `rl report`. It now coerces to
+  `[]`.
+- **Markdown report injection.** `rl report` (markdown) embedded ledger
+  previews/signatures verbatim; pasted into a PR, a crafted preview could
+  inject headings or break code fences. Markdown output now neutralizes
+  newlines, backticks, and pipes (the HTML renderer already escaped).
+
 ## [0.10.1] - 2026-06-11
 
 Security-review release. An independent security pass (separate from the
@@ -258,7 +282,8 @@ First public release.
 - **Zero runtime dependencies**; hooks fail open on any error.
 - 35 tests (`node:test`) and a no-Claude doom-loop demo (`npm run demo`).
 
-[Unreleased]: https://github.com/anlor1002-alt/regressionledger/compare/v0.10.1...HEAD
+[Unreleased]: https://github.com/anlor1002-alt/regressionledger/compare/v0.10.2...HEAD
+[0.10.2]: https://github.com/anlor1002-alt/regressionledger/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/anlor1002-alt/regressionledger/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/anlor1002-alt/regressionledger/compare/v0.8.1...v0.9.0

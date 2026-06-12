@@ -370,7 +370,10 @@ export function loadHits(root) {
   try {
     const path = join(root, 'hits.json');
     if (!existsSync(path)) return [];
-    return JSON.parse(readFileSync(path, 'utf8'));
+    const data = JSON.parse(readFileSync(path, 'utf8'));
+    // A corrupt-but-valid-JSON hits.json (e.g. `{}`) must not crash callers
+    // that expect an array (`rl stats`, `rl report`). (#10, fuzz review.)
+    return Array.isArray(data) ? data : [];
   } catch {
     return [];
   }

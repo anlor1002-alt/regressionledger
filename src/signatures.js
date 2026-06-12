@@ -39,7 +39,10 @@ export const TOOLCHAINS = [
     name: 'pytest',
     commands: [/\bpytest\b/i, /\bpython\d?\s+-m\s+(?:pytest|unittest)\b/i, /\btox\b|\bnox\b/i],
     fail: [/Traceback \(most recent call last\)/, /=+\s*\d+\s+failed/i, /(^|\n)FAILED\b/],
-    failCounts: [/(\d+)\s+failed\b/i, /(\d+)\s+error(?:s)?\s*=/i],
+    // Only the summary line counts — bare "N failed" appears in prose like
+    // "Retrying 1 failed attempt" on a passing run. The summary form lives in
+    // `fail` above; here we just catch the error-count summary.
+    failCounts: [/=+[^=\n]*?(\d+)\s+error/i],
     pass: [/=+\s*\d+\s+passed[^=]*=+/i, /^OK(\s*\(\d+ tests?[^)]*\))?\s*$/m],
     signatures: [
       /^.*\b(?:AssertionError|ValueError|KeyError|AttributeError|TypeError|IndexError)\b.*$/m,

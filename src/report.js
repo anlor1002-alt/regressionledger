@@ -55,6 +55,18 @@ export function buildReportData(root) {
 const dt = (ts) => new Date(ts).toISOString().replace('T', ' ').slice(0, 16);
 const mark = { fail: '✗', pass: '✓', pending: '…' };
 
+// Neutralize ledger-derived text for Markdown: a report is often pasted into a
+// PR or issue, and previews/signatures are agent/test-controlled. Flatten
+// newlines (no heading/list injection), defang backticks (no code-span
+// breakout) and pipes (no table breakout). (#15, security review — the HTML
+// renderer already escapes; markdown didn't.)
+const mdInline = (s) =>
+  String(s ?? '')
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/`/g, "'")
+    .replace(/\|/g, '\\|')
+    .slice(0, 300);
+
 export function renderMarkdown(data) {
   const s = data.summary;
   const lines = [];
@@ -85,12 +97,12 @@ export function renderMarkdown(data) {
     lines.push('## Walls you keep hitting (failures by error signature)');
     lines.push('');
     for (const g of data.errorClusters) {
-      lines.push(`### ${g.count}× — \`${g.signature}\``);
+      lines.push(`### ${g.count}× — \`${mdInline(g.signature)}\``);
       lines.push('');
-      lines.push(`Across ${g.files.length} file${g.files.length === 1 ? '' : 's'}: ${g.files.map((f) => `\`${f}\``).join(', ')}`);
+      lines.push(`Across ${g.files.length} file${g.files.length === 1 ? '' : 's'}: ${g.files.map((f) => `\`${mdInline(f)}\``).join(', ')}`);
       lines.push('');
       for (const a of g.attempts) {
-        lines.push(`- ${dt(a.ts)} · \`${a.file}\` · ${a.symbol} — ${a.preview || ''}`);
+        lines.push(`- ${dt(a.ts)} · \`${mdInline(a.file)}\` · ${mdInline(a.symbol)} — ${mdInline(a.preview)}`);
       }
       lines.push('');
     }
@@ -99,12 +111,12 @@ export function renderMarkdown(data) {
   lines.push('## Attempt history');
   lines.push('');
   for (const f of data.files) {
-    lines.push(`### ${f.file}`);
+    lines.push(`### ${mdInline(f.file)}`);
     lines.push('');
     for (const a of f.attempts) {
-      const sig = a.errorSignature ? ` — ${a.errorSignature}` : '';
-      lines.push(`- ${mark[a.outcome] || '?'} ${a.outcome.toUpperCase()} · ${dt(a.ts)} · ${a.symbol}${sig}`);
-      if (a.preview) lines.push(`  - \`${a.preview}\``);
+      const sig = a.errorSignature ? ` — ${mdInline(a.errorSignature)}` : '';
+      lines.push(`- ${mark[a.outcome] || '?'} ${a.outcome.toUpperCase()} · ${dt(a.ts)} · ${mdInline(a.symbol)}${sig}`);
+      if (a.preview) lines.push(`  - \`${mdInline(a.preview)}\``);
     }
     lines.push('');
   }
