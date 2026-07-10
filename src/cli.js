@@ -1,5 +1,7 @@
 // Command-line surface + hook entry point.
+//   rl demo                      sandboxed doom-loop simulation (nothing installed)
 //   rl init [--warn] [--print]   wire hooks into .claude/settings.json
+//   rl uninstall [--purge]       remove our hooks cleanly; --purge deletes .regressionledger/
 //   rl show [file]               show attempt history (the shareable artifact)
 //   rl list [--json]             flat list of attempts
 //   rl stats                     summary counts
@@ -24,7 +26,8 @@ import {
   DEFAULT_CONFIG,
 } from './ledger.js';
 import { handlePreToolUse, handlePostToolUse, handleSessionStart } from './hooks.js';
-import { init, buildHookConfig } from './install.js';
+import { init, uninstall, buildHookConfig } from './install.js';
+import { runDemo } from './demo.js';
 import { runDoctor } from './doctor.js';
 import { buildReportData, renderMarkdown, renderHtml, groupByError } from './report.js';
 import { explainOutcome } from './outcome.js';
@@ -41,7 +44,9 @@ function version() {
 const HELP = `${color.bold('RegressionLedger')} — stop your coding agent from resurrecting fixes that already failed.
 
 ${color.bold('Usage')}
+  rl demo                      Watch the doom loop get cut, in a sandbox — nothing is installed
   rl init [--warn] [--print]   Install the Claude Code hooks into ./.claude/settings.json
+  rl uninstall [--purge]       Remove the hooks cleanly; --purge also deletes .regressionledger/
   rl doctor                    Verify the install: env, wiring, and live hook round-trips
   rl doctor --explain "<out>"  Show how a test/build output gets classified (and by which pattern)
   rl why <file>                Plain-language summary: what was tried here and how it went
@@ -449,6 +454,40 @@ function cmdInit(args) {
   return 0;
 }
 
+function cmdUninstall(args) {
+  let res;
+  try {
+    res = uninstall(process.cwd(), { purge: args.includes('--purge') });
+  } catch (err) {
+    if (err && err.code === 'RL_SETTINGS_UNPARSEABLE') {
+      console.error(color.red('✗ ' + err.message));
+      return 1;
+    }
+    throw err;
+  }
+  if (!res.settingsExisted && !res.purged) {
+    console.log(color.yellow('Nothing to remove — no .claude/settings.json here and no local ledger purged.'));
+    if (!args.includes('--purge')) {
+      console.log(color.dim('Add --purge to also delete the .regressionledger/ data directory.'));
+    }
+    return 0;
+  }
+  if (res.removedHooks) {
+    console.log(`${color.green('✓')} Removed ${res.removedHooks} RegressionLedger hook entr${res.removedHooks === 1 ? 'y' : 'ies'} from ${res.settingsPath}`);
+    console.log(color.dim('  Everything else in settings.json was left exactly as it was.'));
+  } else {
+    console.log(`${color.green('✓')} No RegressionLedger hooks found in ${res.settingsPath} — nothing to remove.`);
+  }
+  if (res.purged) {
+    console.log(`${color.green('✓')} Deleted ${res.purgedDir} (ledger, hits, config).`);
+  } else if (!args.includes('--purge')) {
+    console.log(color.dim('  Kept .regressionledger/ (your attempt history). Delete it too with: rl uninstall --purge'));
+  }
+  console.log(color.dim('  The .gitignore entries were left in place — they are harmless without the tool.'));
+  console.log(color.dim('  Restart Claude Code (or run /hooks) so it drops the removed hooks.'));
+  return 0;
+}
+
 async function cmdHook(args) {
   // Invoked by Claude Code. Read the JSON event from stdin, dispatch, and print
   // ONLY the hook's JSON response to stdout. Fail open on any error.
@@ -489,6 +528,10 @@ export async function main(argv) {
       return cmdHook(args);
     case 'init':
       return cmdInit(args);
+    case 'demo':
+      return runDemo();
+    case 'uninstall':
+      return cmdUninstall(args);
     case 'show':
       return cmdShow(args);
     case 'list':

@@ -2,7 +2,7 @@
 // local ledger, and keep the raw history out of git. Idempotent — re-running
 // refreshes the RegressionLedger entries without disturbing other hooks.
 
-import { existsSync, readFileSync, copyFileSync } from 'node:fs';
+import { existsSync, readFileSync, copyFileSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { atomicWrite } from './util.js';
@@ -93,6 +93,84 @@ function ensureGitignore(cwd) {
   if (current.includes('.regressionledger/ledger.json')) return false;
   atomicWrite(giPath, current + (current.endsWith('\n') || current === '' ? '' : '\n') + block);
   return true;
+}
+
+/** Count RegressionLedger hook entries inside one event's group array. */
+function countOurEntries(eventArr) {
+  if (!Array.isArray(eventArr)) return 0;
+  let n = 0;
+  for (const group of eventArr) {
+    if (!group || !Array.isArray(group.hooks)) continue;
+    n += group.hooks.filter(
+      (h) => h && typeof h.command === 'string' && h.command.includes(MARKER)
+    ).length;
+  }
+  return n;
+}
+
+/**
+ * `rl uninstall`: the symmetric exit. Removes exactly the RegressionLedger hook
+ * entries from .claude/settings.json (never touching anything else), and with
+ * `purge` also deletes the local .regressionledger/ data directory.
+ *
+ * @param {string} cwd project root
+ * @param {{purge?:boolean}} opts
+ * @returns {{settingsPath:string, settingsExisted:boolean, removedHooks:number, purged:boolean, purgedDir:string|null}}
+ */
+export function uninstall(cwd = process.cwd(), opts = {}) {
+  const settingsPath = join(cwd, '.claude', 'settings.json');
+  const result = {
+    settingsPath,
+    settingsExisted: existsSync(settingsPath),
+    removedHooks: 0,
+    purged: false,
+    purgedDir: null,
+  };
+
+  if (result.settingsExisted) {
+    // Same rule as init: an unparseable settings.json is never overwritten.
+    let settings;
+    try {
+      settings = readSettings(settingsPath);
+    } catch (err) {
+      if (err instanceof SettingsParseError) {
+        const e = new Error(
+          `Refusing to touch ${settingsPath}: it isn't valid JSON (${err.message}). ` +
+            `Fix the JSON and re-run \`rl uninstall\`, or remove the entries whose ` +
+            `command mentions "${MARKER}" by hand.`
+        );
+        e.code = 'RL_SETTINGS_UNPARSEABLE';
+        throw e;
+      }
+      throw err;
+    }
+
+    if (settings.hooks && typeof settings.hooks === 'object' && !Array.isArray(settings.hooks)) {
+      for (const event of Object.keys(settings.hooks)) {
+        const ours = countOurEntries(settings.hooks[event]);
+        if (!ours) continue;
+        result.removedHooks += ours;
+        const cleaned = stripOurEntries(settings.hooks[event]);
+        if (cleaned.length) settings.hooks[event] = cleaned;
+        else delete settings.hooks[event];
+      }
+      if (result.removedHooks) {
+        if (!Object.keys(settings.hooks).length) delete settings.hooks;
+        atomicWrite(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      }
+    }
+  }
+
+  if (opts.purge) {
+    const dir = resolveRoot(cwd);
+    if (existsSync(dir)) {
+      rmSync(dir, { recursive: true, force: true });
+      result.purged = true;
+      result.purgedDir = dir;
+    }
+  }
+
+  return result;
 }
 
 /**

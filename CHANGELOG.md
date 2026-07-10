@@ -6,6 +6,30 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-10
+
+Launch-day polish: see it, trust it, and leave cleanly.
+
+### Added
+- **`rl demo`** — the doom-loop simulation now ships in the package, so
+  `npx regressionledger demo` shows the hard block end-to-end in ~30 seconds
+  with nothing installed and nothing touched (sandboxed temp dir, real hook
+  code paths, self-cleaning). `npm run demo` still works and now shares the
+  same implementation.
+- **`rl uninstall [--purge]`** — the symmetric exit. Removes exactly the hook
+  entries `rl init` added (other hooks, permissions, and settings are never
+  touched; events that only held our hooks are dropped cleanly), refuses to
+  rewrite an unparseable `settings.json` (same safety rule as `init`), and
+  `--purge` also deletes the `.regressionledger/` data directory.
+- **`docs/COMPARISON.md`** — "memory recalls, RegressionLedger refuses": an
+  honest capability matrix versus memory MCPs, `CLAUDE.md` notes, and
+  in-session loop detectors, including what memory tools do *better* and where
+  this tool falls short. Linked from the README's FAQ and "How it's different".
+
+### Changed
+- README leads with the zero-risk `npx regressionledger demo` and documents
+  the escape hatch next to the install instructions.
+
 ## [0.10.2] - 2026-06-11
 
 A 46-agent fuzz/review pass reproduced findings against HEAD. Most of its HIGH

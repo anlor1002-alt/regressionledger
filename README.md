@@ -37,11 +37,11 @@ RegressionLedger is a tiny, **zero-dependency** Claude Code hook + CLI that:
    Run `rl show src/auth.js` to see the full attempt history.
 ```
 
-Try it right now, no agent required:
+Try it right now — one command, no install, no agent, nothing touched (the
+whole simulation runs through the real hook code inside a throwaway temp dir):
 
 ```bash
-npx regressionledger        # (after publish) — or clone and run:
-npm run demo
+npx regressionledger demo
 ```
 
 ---
@@ -150,6 +150,11 @@ npx regressionledger init      # or: npm i -g regressionledger && rl init
 Then restart Claude Code (or run `/hooks`) so it picks up the new hooks. That's
 it — RegressionLedger now works silently until a repeat failed fix shows up.
 
+**The escape hatch:** `rl init` to start, `rl uninstall` to leave no trace. It
+removes exactly the hook entries `init` added — your other hooks, permissions,
+and settings are never touched — and `rl uninstall --purge` also deletes the
+local `.regressionledger/` data.
+
 > Prefer to wire it by hand? `rl init --print` outputs the exact `hooks` block.
 
 ### LLM Quickstart
@@ -172,6 +177,7 @@ It runs itself. The commands you'll actually use:
 
 | Command | What it does |
 | --- | --- |
+| `rl demo` | Watch the doom loop get cut, in a sandboxed simulation — nothing is installed or modified. |
 | `rl doctor` | Verify the install: env checks plus **live hook round-trips** (a first-time edit must pass, a seeded repeat failure must be denied). |
 | `rl doctor --explain "<output>"` | Paste any test/build output and see exactly how it's classified — pass, fail, or "ambiguous, left pending" — and which toolchain pattern decided. |
 | `rl why <file>` | Plain-language answer to "what have we tried here?": blocking failures with reasons, walls (same error across attempts), retirements with receipts, passes. |
@@ -184,6 +190,7 @@ It runs itself. The commands you'll actually use:
 | `rl unblock <file>` | Retire recorded failures for a file when the context genuinely changed — they stop blocking but stay auditable (∅ retired, with a receipt). |
 | `rl export` / `rl import <file>` | Share settled verdicts between machines/teammates — imported failures block here too (herd immunity). |
 | `rl clear --force` | Wipe the ledger. |
+| `rl uninstall [--purge]` | The escape hatch: remove exactly the hook entries `init` added, leaving the rest of `settings.json` untouched. `--purge` also deletes `.regressionledger/`. |
 
 ## Configuration
 
@@ -216,6 +223,9 @@ The differentiators: a **semantic** fix fingerprint (not raw-text or tool+arg
 hashing), an **outcome** link (which fix failed, and why), **cross-session +
 post-compaction** persistence, and a **hard block** that the model can't ignore.
 
+> The long version — including what memory tools do *better* and where this
+> tool honestly falls short: [docs/COMPARISON.md](docs/COMPARISON.md).
+
 ### Things no other tool does (as far as we can tell)
 
 - **🧠 Session briefing.** A `SessionStart` hook injects a compact "what already
@@ -237,6 +247,12 @@ post-compaction** persistence, and a **hard block** that the model can't ignore.
   from people you trust.
 
 ## FAQ
+
+**Isn't this just a memory MCP / lessons-learned layer?**
+No — those store advice the model may ignore; this issues a `PreToolUse` deny
+the model *can't* ignore, and only when a real test run proved that exact fix
+already failed. Memory recalls; RegressionLedger refuses. Full comparison
+(including what memory tools do better): [docs/COMPARISON.md](docs/COMPARISON.md).
 
 **Will it block a legitimately different edit to the same function?**
 No — matching is keyed on the *changed code itself*, not the function. A
