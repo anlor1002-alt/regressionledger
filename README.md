@@ -290,7 +290,6 @@ integrations are on the roadmap.
 - AST-based fingerprints via tree-sitter (more precise symbol & structure
   matching) as an optional upgrade, keeping the zero-dep default.
 - Adapters for other agent harnesses.
-- `rl why <file>` — natural-language "what have we already tried here?" summary.
 
 ## Development
 
